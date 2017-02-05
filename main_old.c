@@ -14,11 +14,11 @@
 #include "macros.h"
 
 // function declarations 
-void set_time(void );
+void set_time(void);
 void current_time(unsigned char* );
-void print_message(unsigned char);
+void print_message(unsigned char );
 int calculate_elapsed_time(unsigned char* );
-void termination(unsigned int );
+void is_terminate(int );
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -33,8 +33,7 @@ const char happynewyear[7] = {  0x00, //45 Seconds
 // global variables 
 unsigned int is_active = 1; // top level flag 
 unsigned int started = 0;   // starting flag 
-unsigned int ended = 0;     //ending flag
-unsigned int quit = 0;      // quit info display page 
+unsigned int ended = 0;     //ending flag 
 unsigned int elapsed_time = 0;
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
@@ -71,27 +70,19 @@ void main(void) {
     initLCD();
     di();       
     printf("press * to start");
-    //__lcd_home();
+    __lcd_home();
     ei();
 
     // wait for the user to start
     while(!started) {       // waiting for keypress interrupt
-        //printf("    %d", started);
-        //__delay_1s();
-        //__lcd_clear();
-        //__lcd_home();
-        //printf("kk");            
     }
 
     // prepare for sorting 
     di();    // Disable all interrupts
     unsigned char time[7];
     I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
-    __lcd_clear();
-    __lcd_home();
     printf("sorting ...");
-    __delay_1s();
-    set_time();
+    __lcd_home();
     ei();
     
     // sorting actions
@@ -112,12 +103,11 @@ void main(void) {
         // sorting actions 
         // ...
 
-        // time recording
-        //printf("sdfd");
+        // time recording 
         current_time(time);
         elapsed_time = calculate_elapsed_time(time);
         printf("  %d", elapsed_time);
-        termination(elapsed_time);
+        is_terminate(elapsed_time);
     }
 
     // prepare for information retrieval 
@@ -126,7 +116,7 @@ void main(void) {
     __lcd_home();
     printf("sorting finished");
     __lcd_newline();
-    printf("show info");
+    printf("show sorting info")
     ei();
     __delay_1s();
     __delay_1s();
@@ -134,30 +124,17 @@ void main(void) {
     print_message('0');
 
     // information retrieval
-    while(is_active && ended && !quit) {     // waiting for keypress interrupts
+    while(is_active && ended) {     // waiting for keypress interrupts
 
     }
     
-    // summary of execution
-    if (quit == 0) {
-        __lcd_clear();
-        __lcd_home();
-        printf("status: ");
-        __lcd_newline();
-        printf("forced stop");
-    }
-    else {
-        __lcd_clear();
-        __lcd_home();
-        printf("status: ");
-        __lcd_newline();
-        printf("finished");
-    }
-    
-    __delay_1s();
-    __delay_1s();
-    __delay_1s();
+    // forced stop
     __lcd_clear();
+    __lcd_home();
+    printf("forced stop");
+    __lcd_newline();
+    printf("status: unfinished");
+    
     return;
 }
 
@@ -168,8 +145,7 @@ void interrupt keypressed(void) {
         __lcd_newline();
         unsigned char keypress = (PORTB & 0xF0) >> 4;
         print_message(keys[keypress]);
-        //__lcd_home();
-        //printf("sddd");
+        __lcd_home();
         INT1IF = 0;     //Clear flag bit
     }
 }
@@ -210,65 +186,58 @@ void current_time(unsigned char* time) {
 void print_message(unsigned char temp) {
     if (temp == '*') {      // start sorting
         printf("start in 5s ...");
-        for(unsigned int i = 0; i < 5; i++) { __delay_1s(); }
+        for(int i = 0; i < 5; i++) { __delay_1s(); }
         __lcd_clear();
-        extern unsigned int started;
         started = 1;
-        printf("%d", started);
-        //set_time();
+        set_time();
     } 
-    else if (temp == 'D') { // emergency stop
-        extern unsigned int is_active;
+    else if (temp == '#') { // emergency stop 
         is_active = 0;
-    }
-    else if (temp == '#') { // emergency stop
-        extern unsigned int quit;
-        quit = 1;
     }
     else if (temp == '0') { // home page
         __lcd_clear();
         __lcd_home();
-        printf("<4>time <5>total");
+        printf("<4>-time  <5>-total");
         __lcd_newline();
-        printf("<7>AA <8>C <9>9V");
+        printf("<7>-AA  <8>-C  <9>-9V");
     }
     else if (temp == '4') { // elapsed time info
         __lcd_clear();
         __lcd_home();
         printf("elapsed time: %d", elapsed_time);
         __lcd_newline();
-        printf("<0>HOME <#>QUIT");
+        printf("<0> HOME");
     }
     else if (temp == '5') { // total number sorted info 
         __lcd_clear();
         __lcd_home();
         printf("num of total: %d", total_num);
         __lcd_newline();
-        printf("<0>HOME <#>QUIT");
+        printf("<0> HOME");
     }   
     else if (temp == '7') { // number of AA orted info
         __lcd_clear();
         __lcd_home();
         printf("num of AA: %d", AA_num);
         __lcd_newline();
-        printf("<0>HOME <#>QUIT");
+        printf("<0> HOME");
     }
     else if (temp == '8') { // number of C sorted info 
         __lcd_clear();
         __lcd_home();
         printf("num of C: %d", C_num);
         __lcd_newline();
-        printf("<0>HOME <#>QUIT");
+        printf("<0> HOME");
     }
     else if (temp == '9') { // number of 9V sorted info 
         __lcd_clear();
         __lcd_home();
         printf("num of 9V: %d", Nine_num);
         __lcd_newline();
-        printf("<0>HOME <#>QUIT");
+        printf("<0> HOME");
     }
     else {                  // default 
-        printf("");
+        return ；
     }
 
 }
@@ -277,6 +246,6 @@ int calculate_elapsed_time(unsigned char* time) {
     return (__bcd_to_num(time[0] + 60*__bcd_to_num(time[1]));
 }
 
-void termination(unsigned int time_now) {
-    if (time_now > 15) { extern unsigned int ended; ended = 1; }
+void is_terminate(int time) {
+    if (time > 15) { ended = 1; }
 }
