@@ -7,6 +7,8 @@
 
 #include <xc.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
@@ -35,7 +37,7 @@ unsigned int is_active = 1; // top level flag
 unsigned int started = 0;   // starting flag 
 unsigned int ended = 0;     //ending flag
 unsigned int quit = 0;      // quit info display page 
-unsigned int elapsed_time = 0;
+int elapsed_time = 0;
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
 unsigned int C_num = 0;
@@ -116,7 +118,7 @@ void main(void) {
         //printf("sdfd");
         current_time(time);
         elapsed_time = calculate_elapsed_time(time);
-        printf("  %d", elapsed_time);
+        printf("  %3d", elapsed_time);
         termination(elapsed_time);
     }
 
@@ -235,6 +237,7 @@ void print_message(unsigned char temp) {
     else if (temp == '4') { // elapsed time info
         __lcd_clear();
         __lcd_home();
+        //extern int elapsed_time;
         printf("elapsed time: %d", elapsed_time);
         __lcd_newline();
         printf("<0>HOME <#>QUIT");
@@ -274,9 +277,15 @@ void print_message(unsigned char temp) {
 }
 
 int calculate_elapsed_time(unsigned char* time) {
-    return (__bcd_to_num(time[0] + 60*__bcd_to_num(time[1]));
+    int sec = (int)(time[0]);
+   // printf("%2d", sec);
+    int min = (int)(time[1]);
+    //printf(" %2d", min);
+    //return (sec + 60*min);
+    return (__bcd_to_num(time[0]) + 60*__bcd_to_num(time[1]));
 }
 
+
 void termination(unsigned int time_now) {
-    if (time_now > 15) { extern unsigned int ended; ended = 1; }
+    if (time_now > 70) { extern unsigned int ended; ended = 1; }
 }

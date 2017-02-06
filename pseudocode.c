@@ -7,6 +7,8 @@
 
 #include <xc.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
@@ -35,7 +37,7 @@ unsigned int is_active = 1; // top level flag
 unsigned int started = 0;   // starting flag 
 unsigned int ended = 0;     //ending flag
 unsigned int quit = 0;      // quit info display page 
-unsigned int elapsed_time = 0;
+int elapsed_time = 0;
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
 unsigned int C_num = 0;
@@ -231,6 +233,7 @@ void print_message(unsigned char temp) {
     else if (temp == '4') { // elapsed time info
         __lcd_clear();
         __lcd_home();
+        extern int elapsed_time; 
         printf("elapsed time: %d", elapsed_time);
         __lcd_newline();
         printf("<0>HOME <#>QUIT");
@@ -270,7 +273,10 @@ void print_message(unsigned char temp) {
 }
 
 int calculate_elapsed_time(unsigned char* time) {
-    return (__bcd_to_num(time[0] + 60*__bcd_to_num(time[1]));
+    int sec = (int)strtol(time[0], NULL, 0);
+    int min = (int)strtol(time[1], NULL, 0);
+    return (sec + 60*min);
+    // return (__bcd_to_num(time[0] + 60*__bcd_to_num(time[1]));
 }
 
 void termination(unsigned int time_now) {
