@@ -112,6 +112,9 @@ void main(void) {
             set_time();
 
             unsigned int is_battery = 0;
+            
+            // testing 
+            unsigned int ir = 0;
 /*
             OSCCON = 0xF0;  //8MHz
             // Set internal oscillator to run at 8 MHZ
@@ -149,10 +152,11 @@ void main(void) {
                     // push battery
                 }
 */
-
+                ir = PORTAbits.RA4 ;
+                
                 current_time(time);
                 elapsed_time = calculate_elapsed_time(time);
-                printf("  %3d", elapsed_time);
+                printf(" %3d   %d", elapsed_time, ir);
                 __delay_ms(300);
                 termination(elapsed_time);
             }
@@ -399,6 +403,15 @@ int calculate_elapsed_time(unsigned char* time) {
  * @param time_now [description]
  */
 void termination(unsigned int time_now) {
-    if (time_now > 70) { extern unsigned int is_wait; is_wait = 1; }
+    if (time_now > 50) { extern unsigned int is_wait; is_wait = 1; }
 }
 
+void readADC(char channel){
+    // Select A2D channel to read
+    ADCON0 = ((channel <<2));
+    ADON = 1;
+    ADCON0bits.GO = 1;
+   while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}
+    
+    
+}
