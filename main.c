@@ -7,20 +7,34 @@
 
 #include <xc.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
 #include "I2C.h"
 #include "macros.h"
 
+//#include "helpers.h"
+//#include "PWM.h"
+
+// page selection 
+#define HOME 0
+#define TIME 1
+#define TOTAL_BAT 2
+#define AA_BAT 3
+#define C_BAT 4
+#define NINE_BAT 5
+#define DRAIN_BAT 6
+#define HISTORY 7
+#define logA 8
+#define logB 9
+#define logC 10
+
 // function declarations 
-void set_time(void );
-void current_time(unsigned char* );
-void print_message(unsigned char);
-int calculate_elapsed_time(unsigned char* );
-void termination(unsigned int );
+void set_time(void);
+void current_time(unsigned char*);
+void select_menu(unsigned char);
+int calculate_elapsed_time(unsigned char*);
+void termination(unsigned int);
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -33,21 +47,33 @@ const char happynewyear[7] = {  0x00, //45 Seconds
                             0x17};//2016
 
 // global variables 
-unsigned int is_active = 1; // top level flag 
+unsigned int is_active = 0; // run sorting operation
+
 unsigned int started = 0;   // starting flag 
 unsigned int ended = 0;     //ending flag
 unsigned int quit = 0;      // quit info display page 
-int elapsed_time = 0;
+
+
+// battery info
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
 unsigned int C_num = 0;
 unsigned int Nine_num = 0;
+unsigned int Drain_num = 0;
+
+// menu info
+unsigned int menu = HOME;
+
+// time info
+unsigned int elapsed_time = 0;
+unsigned int is_wait = 0;
+
+// log info
+unsigned int log = 0;
 
 // main function 
 void main(void) {
-
     // <editor-fold defaultstate="collapsed" desc=" STARTUP SEQUENCE ">
-    
     TRISA = 0xFF; // Set Port A as all input
     TRISB = 0xFF; 
     TRISC = 0x00;
@@ -66,116 +92,187 @@ void main(void) {
     nRBPU = 0;
     INT1IE = 1;
     ei();           //Enable all interrupts
-
     //</editor-fold>
     
+
     // initializations and prompt to start
-    initLCD();
-    di();       
-    printf("press * to start");
-    //__lcd_home();
-    ei();
-
-    // wait for the user to start
-    while(!started) {       // waiting for keypress interrupt
-        //printf("    %d", started);
-        //__delay_1s();
-        //__lcd_clear();
-        //__lcd_home();
-        //printf("kk");            
-    }
-
-    // prepare for sorting 
-    di();    // Disable all interrupts
-    unsigned char time[7];
+    di();
     I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
-    __lcd_clear();
-    __lcd_home();
-    printf("sorting ...");
-    __delay_1s();
-    set_time();
+    initLCD();
     ei();
+
+
+    // main execution loop
+    while(1) {
+
+        if(is_active) {
+            LATCbits.LATC0 = 1; //RC0 = 1 , free keypad pins
+            unsigned char time[7];
+            elapsed_time = 0;
+            set_time();
+
+            unsigned int is_battery = 0;
+/*
+            OSCCON = 0xF0;  //8MHz
+            // Set internal oscillator to run at 8 MHZ
+            OSCCON = OSCCON | 0b01110000; 
+            // Enable PLL for the internal oscillator, Processor now runs at 32MHZ
+            OSCTUNEbits.PLLEN = 1; 
+
+            set_PWM_freq (3100);
     
-    // sorting actions
-    while(is_active && started && !ended) {
-        // while(PORTBbits.RB1 == 0){ 
-        //     // RB1 is the interrupt pin, so if there is no key pressed, RB1 will be 0
-        //     // the PIC will wait and do nothing until a key press is signaled
-        // }
-        // unsigned char keypress = (PORTB & 0xF0)>>4; // Read the 4 bit character code
-        // while(PORTBbits.RB1 == 1){
-        //     // Wait until the key has been released
-        // }
-        // Nop();  //Apply breakpoint here because of compiler optimizations
-        // Nop();
-        // unsigned char temp = keys[keypress];
-        // putch(temp);   // Push the character to be displayed on the LCD
-        
-        // sorting actions 
-        // ...
+            PWM1_Start();
 
-        // time recording
-        //printf("sdfd");
-        current_time(time);
-        elapsed_time = calculate_elapsed_time(time);
-        printf("  %3d", elapsed_time);
-        termination(elapsed_time);
-    }
+            TRISC = 0x11110001;
+*/
+            while(total_num < 15 && !is_wait) {
+/*
+                // rotate wheel & move conveyor belt
+                LATCbits.LATC5 = 1;
+                LATCbits.LATC6 = 0;
+                set_PWM1_duty(512);
 
-    // prepare for information retrieval 
-    di();    
-    __lcd_clear();
-    __lcd_home();
-    printf("sorting finished");
-    __lcd_newline();
-    printf("show info");
-    ei();
-    __delay_1s();
-    __delay_1s();
-    __delay_1s();
-    print_message('0');
+                // infrared sensor read input 
+                is_battery = LATAbits.LATA1;
+                __lcd_clear();
+                __lcd_home();
+                printf(" %d ", is_battery);
+                __lcd_newline();
 
-    // information retrieval
-    while(is_active && ended && !quit) {     // waiting for keypress interrupts
+                if(is_battery) {
+                   // sorting logic  
 
-    }
-    
-    // summary of execution
-    if (quit == 0) {
-        __lcd_clear();
-        __lcd_home();
-        printf("status: ");
-        __lcd_newline();
-        printf("forced stop");
-    }
-    else {
-        __lcd_clear();
-        __lcd_home();
-        printf("status: ");
-        __lcd_newline();
-        printf("finished");
-    }
-    
-    __delay_1s();
-    __delay_1s();
-    __delay_1s();
-    __lcd_clear();
-    return;
+
+                    // bin selection
+
+
+                    // push battery
+                }
+*/
+
+                current_time(time);
+                elapsed_time = calculate_elapsed_time(time);
+                printf("  %3d", elapsed_time);
+                __delay_ms(300);
+                termination(elapsed_time);
+            }
+
+            LATCbits.LATC0 = 0; // RC1 = 0 enable keypad 
+            is_wait = !is_wait;
+            is_active = !is_active; // reset the operation flag 
+        } else if (log != 0) {
+            
+            while(menu == logA) {
+                di();
+                __lcd_home();
+                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
+                __lcd_newline();
+                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                ei();
+            }
+            
+            while(menu == logB) {
+                di();
+                __lcd_home();
+                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
+                __lcd_newline();
+                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                ei();
+            }
+            
+            while(menu == logC) {
+                di();
+                __lcd_home();
+                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
+                __lcd_newline();
+                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                ei();
+            }
+            
+        } else {
+
+            while(menu == HOME && !is_active) {
+                di();
+                __lcd_home();
+                printf("press * to run");
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == TIME) {
+                di();
+                __lcd_home();
+                printf("elapsed time: %d", elapsed_time);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == TOTAL_BAT) {
+                di();
+                __lcd_home();
+                printf("total: %d", total_num);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == AA_BAT) {
+                di();
+                __lcd_home();
+                printf("AA sorted: %d", AA_num);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == C_BAT) {
+                di();
+                __lcd_home();
+                printf("C sorted: %d", C_num);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == NINE_BAT) {
+                di();
+                __lcd_home();
+                printf("9V sorted: %d", Nine_num);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == DRAIN_BAT) {
+                di();
+                __lcd_home();
+                printf("Drained: %d", Drain_num);
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+            while(menu == HISTORY) {
+                di();
+                __lcd_home();
+                printf("op #: 1 2 3");
+                __lcd_newline();
+                printf("<< 7 DATA 9 >>");
+                ei();
+            }
+
+        }   // end of the if(is_active)-else
+    }   // end of the while(1) loop
+    return ;   
 }
 
-/*######################################################################################*/
 
-void interrupt keypressed(void) {
-    if(INT1IF){
-        __lcd_newline();
-        unsigned char keypress = (PORTB & 0xF0) >> 4;
-        print_message(keys[keypress]);
-        //__lcd_home();
-        //printf("sddd");
-        INT1IF = 0;     //Clear flag bit
-    }
-}
 
+/**
+ * [set_time description]
+ */
 void set_time(void) {
     I2C_Master_Start(); //Start condition
     I2C_Master_Write(0b11010000); //7 bit RTC address + Write
@@ -186,6 +283,84 @@ void set_time(void) {
     I2C_Master_Stop(); //Stop condition
 }
 
+/**
+ * [keypressed description]
+ * @return  [description]
+ */
+void interrupt keypressed(void) {
+    if(INT1IF){
+        __lcd_clear();
+        unsigned char keypress = (PORTB & 0xF0) >> 4;
+        select_menu(keys[keypress]);
+        INT1IF = 0;     //Clear flag bit
+    }
+}
+
+/**
+ * switch between different menus 
+ * @param temp : key pressed 
+ */
+void select_menu(unsigned char temp) {
+    extern unsigned int menu;
+    extern unsigned int log;
+    extern unsigned int is_active;
+    switch(menu) {
+        case HOME:
+            if(temp == '*') {
+                is_active = !is_active;
+            } else {
+                if(temp == '7'){menu = TIME;} else if(temp == '9'){menu = TOTAL_BAT;}
+            }
+            break;
+        case TIME:
+            if(temp == '7'){menu = HISTORY;} else if(temp == '9'){menu = HOME;}
+            break;
+        case TOTAL_BAT:
+            if(temp == '7'){menu = HOME;} else if(temp == '9'){menu = AA_BAT;}
+            break;
+        case AA_BAT:
+            if(temp == '7'){menu = TOTAL_BAT;} else if(temp == '9'){menu = C_BAT;}
+            break;
+        case C_BAT:
+            if(temp == '7'){menu = AA_BAT;} else if(temp == '9'){menu = NINE_BAT;}
+            break;
+        case NINE_BAT:
+            if(temp == '7'){menu = C_BAT;} else if(temp == '9'){menu = DRAIN_BAT;}
+            break;
+        case DRAIN_BAT:
+            if(temp == '7'){menu = NINE_BAT;} else if(temp == '9'){menu = HISTORY;}
+            break;
+        case HISTORY:
+            if(temp == '1') {
+                log = 1;
+                menu = logA;
+            } else if (temp == '2') {
+                log = 2;
+                menu = logB;
+            } else if (temp == '3') {
+                log = 3;
+                menu = logC;
+            } else {
+                if(temp == '7'){menu = DRAIN_BAT;} else if(temp == '9'){menu = TIME;}
+            }
+            break;
+        case logA:
+        case logB:
+        case logC:
+            if(temp == '8') {
+                menu = HISTORY;
+                log = 0;
+            }
+            break;
+        default:
+            printf("error");
+    } 
+}
+
+/**
+ * [current_time description]
+ * @param time [description]
+ */
 void current_time(unsigned char* time) {
         //Reset RTC memory pointer 
         I2C_Master_Start(); //Start condition
@@ -203,89 +378,27 @@ void current_time(unsigned char* time) {
         I2C_Master_Stop();
         __lcd_clear();
         __lcd_home();
-        printf("%02x/%02x/%02x", time[6],time[5],time[4]);    //Print date in YY/MM/DD
+        // printf("%02x/%02x/%02x", time[6],time[5],time[4]);    //Print date in YY/MM/DD
         __lcd_newline();
-        printf("%02x:%02x:%02x", time[2],time[1],time[0]);    //HH:MM:SS
+        // printf("%02x:%02x:%02x", time[2],time[1],time[0]);    //HH:MM:SS
         // __delay_1s();
+        __delay_ms(300);
 }
 
-void print_message(unsigned char temp) {
-    if (temp == '*') {      // start sorting
-        printf("start in 5s ...");
-        for(unsigned int i = 0; i < 5; i++) { __delay_1s(); }
-        __lcd_clear();
-        extern unsigned int started;
-        started = 1;
-        printf("%d", started);
-        //set_time();
-    } 
-    else if (temp == 'D') { // emergency stop
-        extern unsigned int is_active;
-        is_active = 0;
-    }
-    else if (temp == '#') { // emergency stop
-        extern unsigned int quit;
-        quit = 1;
-    }
-    else if (temp == '0') { // home page
-        __lcd_clear();
-        __lcd_home();
-        printf("<4>time <5>total");
-        __lcd_newline();
-        printf("<7>AA <8>C <9>9V");
-    }
-    else if (temp == '4') { // elapsed time info
-        __lcd_clear();
-        __lcd_home();
-        //extern int elapsed_time;
-        printf("elapsed time: %d", elapsed_time);
-        __lcd_newline();
-        printf("<0>HOME <#>QUIT");
-    }
-    else if (temp == '5') { // total number sorted info 
-        __lcd_clear();
-        __lcd_home();
-        printf("num of total: %d", total_num);
-        __lcd_newline();
-        printf("<0>HOME <#>QUIT");
-    }   
-    else if (temp == '7') { // number of AA orted info
-        __lcd_clear();
-        __lcd_home();
-        printf("num of AA: %d", AA_num);
-        __lcd_newline();
-        printf("<0>HOME <#>QUIT");
-    }
-    else if (temp == '8') { // number of C sorted info 
-        __lcd_clear();
-        __lcd_home();
-        printf("num of C: %d", C_num);
-        __lcd_newline();
-        printf("<0>HOME <#>QUIT");
-    }
-    else if (temp == '9') { // number of 9V sorted info 
-        __lcd_clear();
-        __lcd_home();
-        printf("num of 9V: %d", Nine_num);
-        __lcd_newline();
-        printf("<0>HOME <#>QUIT");
-    }
-    else {                  // default 
-        printf("");
-    }
-
-}
-
+/**
+ * [calculate_elapsed_time description]
+ * @param  time [description]
+ * @return      [description]
+ */
 int calculate_elapsed_time(unsigned char* time) {
-    int sec = (int)(time[0]);
-   // printf("%2d", sec);
-    int min = (int)(time[1]);
-    //printf(" %2d", min);
-    //return (sec + 60*min);
     return (__bcd_to_num(time[0]) + 60*__bcd_to_num(time[1]));
 }
 
-
+/**
+ * [termination description]
+ * @param time_now [description]
+ */
 void termination(unsigned int time_now) {
-    if (time_now > 70) { extern unsigned int ended; ended = 1; }
+    if (time_now > 70) { extern unsigned int is_wait; is_wait = 1; }
 }
+
