@@ -7,6 +7,7 @@
 
 #include <xc.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
@@ -37,9 +38,11 @@ void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
 void termination(unsigned int);
 void readADC(char);
-void cleanCount(void);
-int Eeprom_ReadByte(int);
-void Eeprom_WriteByte(int, int);
+void clean_count(void);
+uint8_t Eeprom_ReadByte(uint16_t);
+void Eeprom_WriteByte(uint16_t, uint8_t);
+uint16_t next_address(uint16_t);
+
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -111,7 +114,7 @@ void main(void) {
     di();
     I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
     initLCD();
-    unsigned int address = 0;
+    uint16_t address = 0;
     ei();
 
 
@@ -122,10 +125,10 @@ void main(void) {
             LATCbits.LATC0 = 1; //RC0 = 1 , free keypad pins
             unsigned char time[7];
             elapsed_time = 0;
-            cleanCount();
+            clean_count();
             set_time();
 
-            unsigned int is_battery = 1;
+            unsigned int is_battery = 0;
             
 /*
             OSCCON = 0xF0;  //8MHz
@@ -184,11 +187,16 @@ void main(void) {
             }
             
             // EEPROM logging 
-            Eeprom_WriteByte(address++, AA_num);
-            Eeprom_WriteByte(address++, C_num);
-            Eeprom_WriteByte(address++, Nine_num);
-            Eeprom_WriteByte(address++, Drain_num);
-            Eeprom_WriteByte(address++, elapsed_time);
+            Eeprom_WriteByte(address, AA_num);
+            address = next_address(address);
+            Eeprom_WriteByte(address, C_num);
+            address = next_address(address);
+            Eeprom_WriteByte(address, Nine_num);
+            address = next_address(address);
+            Eeprom_WriteByte(address, Drain_num);
+            address = next_address(address);
+            Eeprom_WriteByte(address, elapsed_time);
+            address = next_address(address);
 
             LATCbits.LATC0 = 0; // RC1 = 0 enable keypad 
             is_wait = !is_wait;
@@ -198,6 +206,18 @@ void main(void) {
             while(menu == logA) {
                 di();
                 __lcd_home();
+                
+                uint16_t address = 0;
+                unsigned int AA_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int C_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Nine_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Drain_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int elapsed_time = Eeprom_ReadByte(address);
+                
                 printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
                 __lcd_newline();
                 printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
@@ -207,6 +227,19 @@ void main(void) {
             while(menu == logB) {
                 di();
                 __lcd_home();
+                
+                uint16_t address = 40;
+                unsigned int AA_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int C_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Nine_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Drain_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int elapsed_time = Eeprom_ReadByte(address);
+                
+                
                 printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
                 __lcd_newline();
                 printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
@@ -216,6 +249,19 @@ void main(void) {
             while(menu == logC) {
                 di();
                 __lcd_home();
+                
+                uint16_t address = 80;
+                unsigned int AA_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int C_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Nine_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int Drain_num = Eeprom_ReadByte(address);
+                address = next_address(address);
+                unsigned int elapsed_time = Eeprom_ReadByte(address);
+                
+                
                 printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
                 __lcd_newline();
                 printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
@@ -450,7 +496,7 @@ void readADC(char channel) {
 /**
  * 
  */
-void cleanCount(void) {
+void clean_count(void) {
     extern unsigned int AA_num, C_num, Nine_num, Drain_num, elapsed_time;
     AA_num = 0;
     C_num = 0;
@@ -464,10 +510,10 @@ void cleanCount(void) {
  * @param address
  * @return 
  */
-int Eeprom_ReadByte(int address) {
+uint8_t Eeprom_ReadByte(uint16_t address) {
     // Set address registers
-    EEADRH = (address >> 8);
-    EEADR = address;
+    EEADRH = (uint8_t)(address >> 8);
+    EEADR = (uint8_t)address;
 
     EECON1bits.EEPGD = 0;       // Select EEPROM Data Memory
     EECON1bits.CFGS = 0;        // Access flash/EEPROM NOT config. registers
@@ -480,15 +526,16 @@ int Eeprom_ReadByte(int address) {
     return EEDATA;              // Return data
 }
 
+
 /**
  * 
  * @param address
  * @param data
  */
-void Eeprom_WriteByte(int address, int data) {    
+void Eeprom_WriteByte(uint16_t address, uint8_t data) {    
     // Set address registers
-    EEADRH = (address >> 8);
-    EEADR = address;
+    EEADRH = (uint8_t)(address >> 8);
+    EEADR = (uint8_t)address;
 
     EEDATA = data;          // Write data we want to write to SFR
     EECON1bits.EEPGD = 0;   // Select EEPROM data memory
@@ -509,4 +556,13 @@ void Eeprom_WriteByte(int address, int data) {
 
     PIR2bits.EEIF = 0;      //Clearing EEIF bit (this MUST be cleared in software after each write)
     EECON1bits.WREN = 0;    // Disable write (for safety, it is re-enabled next time a EEPROM write is performed)
+}
+
+/**
+ * 
+ * @param address
+ * @return 
+ */
+uint16_t next_address(uint16_t address) {
+    return address + 8;
 }
