@@ -13,6 +13,7 @@
 #include "I2C.h"
 #include "macros.h"
 
+//#include "eeprom_routines.h"
 //#include "helpers.h"
 //#include "PWM.h"
 
@@ -35,6 +36,10 @@ void current_time(unsigned char*);
 void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
 void termination(unsigned int);
+void readADC(char);
+void cleanCount(void);
+int Eeprom_ReadByte(int);
+void Eeprom_WriteByte(int, int);
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -91,14 +96,22 @@ void main(void) {
     
     nRBPU = 0;
     INT1IE = 1;
+    
+    ADCON0 = 0x00;  //Disable ADC
+    ADCON1 = 0x1B;  //AN0 to AN3 used as analog input
+    //CVRCON = 0x00; // Disable CCP reference voltage output
+    CMCONbits.CIS = 0;
+    ADFM = 1;
+    
     ei();           //Enable all interrupts
     //</editor-fold>
     
-
+    
     // initializations and prompt to start
     di();
     I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
     initLCD();
+    unsigned int address = 0;
     ei();
 
 
@@ -109,12 +122,11 @@ void main(void) {
             LATCbits.LATC0 = 1; //RC0 = 1 , free keypad pins
             unsigned char time[7];
             elapsed_time = 0;
+            cleanCount();
             set_time();
 
-            unsigned int is_battery = 0;
+            unsigned int is_battery = 1;
             
-            // testing 
-            unsigned int ir = 0;
 /*
             OSCCON = 0xF0;  //8MHz
             // Set internal oscillator to run at 8 MHZ
@@ -142,24 +154,41 @@ void main(void) {
                 printf(" %d ", is_battery);
                 __lcd_newline();
 
-                if(is_battery) {
+                
+*/
+                is_battery = PORTAbits.RA4 ;
+                
+                //readADC(2);
+                //__delay_1s();
+                
+                if(!is_battery) {
                    // sorting logic  
-
-
+                    readADC(2);
                     // bin selection
 
 
                     // push battery
+                    
+                    // testing 
+                    AA_num++;
+                    C_num += 2;
+                    Nine_num += 3;
+                    Drain_num += 4;
                 }
-*/
-                ir = PORTAbits.RA4 ;
                 
                 current_time(time);
                 elapsed_time = calculate_elapsed_time(time);
-                printf(" %3d   %d", elapsed_time, ir);
+                printf(" %3d %d %x %x", elapsed_time, is_battery, ADRESH, ADRESL);
                 __delay_ms(300);
                 termination(elapsed_time);
             }
+            
+            // EEPROM logging 
+            Eeprom_WriteByte(address++, AA_num);
+            Eeprom_WriteByte(address++, C_num);
+            Eeprom_WriteByte(address++, Nine_num);
+            Eeprom_WriteByte(address++, Drain_num);
+            Eeprom_WriteByte(address++, elapsed_time);
 
             LATCbits.LATC0 = 0; // RC1 = 0 enable keypad 
             is_wait = !is_wait;
@@ -406,12 +435,78 @@ void termination(unsigned int time_now) {
     if (time_now > 50) { extern unsigned int is_wait; is_wait = 1; }
 }
 
-void readADC(char channel){
+/**
+ * 
+ * @param channel
+ */
+void readADC(char channel) {
     // Select A2D channel to read
     ADCON0 = ((channel <<2));
     ADON = 1;
     ADCON0bits.GO = 1;
-   while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}
-    
-    
+   while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}    
+}
+
+/**
+ * 
+ */
+void cleanCount(void) {
+    extern unsigned int AA_num, C_num, Nine_num, Drain_num, elapsed_time;
+    AA_num = 0;
+    C_num = 0;
+    Nine_num = 0;
+    Drain_num = 0;
+    elapsed_time = 0;
+}
+
+/**
+ * 
+ * @param address
+ * @return 
+ */
+int Eeprom_ReadByte(int address) {
+    // Set address registers
+    EEADRH = (address >> 8);
+    EEADR = address;
+
+    EECON1bits.EEPGD = 0;       // Select EEPROM Data Memory
+    EECON1bits.CFGS = 0;        // Access flash/EEPROM NOT config. registers
+    EECON1bits.RD = 1;          // Start a read cycle
+
+    // A read should only take one cycle, and then the hardware will clear
+    // the RD bit
+    while(EECON1bits.RD == 1);
+
+    return EEDATA;              // Return data
+}
+
+/**
+ * 
+ * @param address
+ * @param data
+ */
+void Eeprom_WriteByte(int address, int data) {    
+    // Set address registers
+    EEADRH = (address >> 8);
+    EEADR = address;
+
+    EEDATA = data;          // Write data we want to write to SFR
+    EECON1bits.EEPGD = 0;   // Select EEPROM data memory
+    EECON1bits.CFGS = 0;    // Access flash/EEPROM NOT config. registers
+    EECON1bits.WREN = 1;    // Enable writing of EEPROM (this is disabled again after the write completes)
+
+    // The next three lines of code perform the required operations to
+    // initiate a EEPROM write
+    EECON2 = 0x55;          // Part of required sequence for write to internal EEPROM
+    EECON2 = 0xAA;          // Part of required sequence for write to internal EEPROM
+    EECON1bits.WR = 1;      // Part of required sequence for write to internal EEPROM
+
+    // Loop until write operation is complete
+    while(PIR2bits.EEIF == 0)
+    {
+        continue;   // Do nothing, are just waiting
+    }
+
+    PIR2bits.EEIF = 0;      //Clearing EEIF bit (this MUST be cleared in software after each write)
+    EECON1bits.WREN = 0;    // Disable write (for safety, it is re-enabled next time a EEPROM write is performed)
 }
