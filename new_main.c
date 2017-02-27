@@ -20,12 +20,19 @@ unsigned int is_active = 1; // top level flag
 unsigned int started = 0;   // starting flag 
 unsigned int ended = 0;     //ending flag
 unsigned int quit = 0;      // quit info display page 
-int elapsed_time = 0;
+
+unsigned int elapsed_time = 0;
+
+// battery info
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
 unsigned int C_num = 0;
 unsigned int Nine_num = 0;
 unsigned int Drain_num = 0;
+
+// page info
+unsigned int page = 0;
+
 
 // main function 
 void main(void) {
@@ -64,6 +71,26 @@ void main(void) {
         __lcd_nextline();
         printf("press # for");
         ei();
+
+        while(page == HOME) {
+
+        }
+
+        while(page == TIME) {
+
+        }
+
+        while(page == AA_BAT) {
+
+        }
+
+        while() {
+
+        }
+
+        while() {
+
+        }
 
 
     }

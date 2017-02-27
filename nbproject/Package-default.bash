@@ -10,9 +10,9 @@ CND_CONF=default
 CND_DISTDIR=dist
 TMPDIR=build/${CND_CONF}/${IMAGE_TYPE}/tmp-packaging
 TMPDIRNAME=tmp-packaging
-OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/PIC18_KEYPADLCD.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-OUTPUT_BASENAME=PIC18_KEYPADLCD.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-PACKAGE_TOP_DIR=pic18keypadlcd.x/
+OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/BatterySorter.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+OUTPUT_BASENAME=BatterySorter.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+PACKAGE_TOP_DIR=batterysorter/
 
 # Functions
 function checkReturnCode
@@ -57,15 +57,15 @@ mkdir -p ${TMPDIR}
 
 # Copy files and create directories and links
 cd "${TOP}"
-makeDirectory ${TMPDIR}/pic18keypadlcd.x/bin
+makeDirectory ${TMPDIR}/batterysorter/bin
 copyFileToTmpDir "${OUTPUT_PATH}" "${TMPDIR}/${PACKAGE_TOP_DIR}bin/${OUTPUT_BASENAME}" 0755
 
 
 # Generate tar file
 cd "${TOP}"
-rm -f ${CND_DISTDIR}/${CND_CONF}/package/pic18keypadlcd.x.tar
+rm -f ${CND_DISTDIR}/${CND_CONF}/package/batterysorter.tar
 cd ${TMPDIR}
-tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/pic18keypadlcd.x.tar *
+tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/batterysorter.tar *
 checkReturnCode
 
 # Cleanup

@@ -1,11 +1,11 @@
 Version 3.2 HI-TECH Software Intermediate Code
 [v F2878 `(v ~T0 @X0 1 tf1`ul ]
-"159 D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18.h
+"159 /Applications/microchip/xc8/v1.40/include/pic18.h
 [v __delay `JF2878 ~T0 @X0 0 e ]
 [p i __delay ]
 "11 lcd.h
 [v _lcdInst `(v ~T0 @X0 0 ef1`uc ]
-"1211 D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18f4620.h
+"1211 /Applications/microchip/xc8/v1.40/include/pic18f4620.h
 [s S47 :1 `uc 1 :1 `uc 1 :1 `uc 1 :1 `uc 1 :1 `uc 1 :1 `uc 1 :1 `uc 1 :1 `uc 1 ]
 [n S47 . LATD0 LATD1 LATD2 LATD3 LATD4 LATD5 LATD6 LATD7 ]
 "1221
@@ -18,13 +18,13 @@ Version 3.2 HI-TECH Software Intermediate Code
 [v _LATDbits `VS46 ~T0 @X0 0 e@3980 ]
 "12 lcd.h
 [v _lcdNibble `(v ~T0 @X0 0 ef1`uc ]
-"1205 D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18f4620.h
+"1205 /Applications/microchip/xc8/v1.40/include/pic18f4620.h
 [v _LATD `Vuc ~T0 @X0 0 e@3980 ]
 [; ;htc.h: 26: extern const char __xc8_OPTIM_SPEED;
 [; ;htc.h: 28: extern double __fpnormalize(double);
 [; ;xc8debug.h: 14: extern void __builtin_software_breakpoint(void);
 [; ;pic18f4620.h: 49: extern volatile unsigned char PORTA @ 0xF80;
-"51 D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18f4620.h
+"51 /Applications/microchip/xc8/v1.40/include/pic18f4620.h
 [; ;pic18f4620.h: 51: asm("PORTA equ 0F80h");
 [; <" PORTA equ 0F80h ;# ">
 [; ;pic18f4620.h: 54: typedef union {

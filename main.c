@@ -14,7 +14,6 @@
 #include "I2C.h"
 #include "macros.h"
 
-//#include "eeprom_routines.h"
 //#include "helpers.h"
 //#include "PWM.h"
 
@@ -38,11 +37,15 @@ void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
 void termination(unsigned int);
 void readADC(char);
+float convert_voltage(unsigned int, unsigned int);
 void clean_count(void);
 uint8_t Eeprom_ReadByte(uint16_t);
 void Eeprom_WriteByte(uint16_t, uint8_t);
 uint16_t next_address(uint16_t);
-
+void show_log(uint16_t);
+void move_stepper(unsigned int loop_duration, unsigned int duty);
+void move_servo(unsigned int loop_duration, unsigned int duty);
+void move_dc(unsigned int duration, unsigned int duty);
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -122,13 +125,13 @@ void main(void) {
     while(1) {
 
         if(is_active) {
-            LATCbits.LATC0 = 1; //RC0 = 1 , free keypad pins
+            LATCbits.LATC6 = 1; //RC0 = 1 , free keypad pins
             unsigned char time[7];
-            elapsed_time = 0;
+            elapsed_time = 1;
             clean_count();
             set_time();
 
-            unsigned int is_battery = 0;
+            unsigned int is_battery = 1;
             
 /*
             OSCCON = 0xF0;  //8MHz
@@ -143,6 +146,11 @@ void main(void) {
 
             TRISC = 0x11110001;
 */
+            
+//            for(unsigned int i = 0; i < 4; i++) {
+//                move_servo(100,5);
+//            }
+            
             while(total_num < 15 && !is_wait) {
 /*
                 // rotate wheel & move conveyor belt
@@ -158,8 +166,9 @@ void main(void) {
                 __lcd_newline();
 
                 
-*/
+*/          
                 is_battery = PORTAbits.RA4 ;
+                move_stepper(100,5);
                 
                 //readADC(2);
                 //__delay_1s();
@@ -177,11 +186,15 @@ void main(void) {
                     C_num += 2;
                     Nine_num += 3;
                     Drain_num += 4;
+                    
+                    //move_stepper(100,5);
+                    //move_servo(100, 5);
+                    //move_dc(100, 5);
                 }
                 
                 current_time(time);
                 elapsed_time = calculate_elapsed_time(time);
-                printf(" %3d %d %x %x", elapsed_time, is_battery, ADRESH, ADRESL);
+                printf(" %3d %d %x %x %f", elapsed_time, is_battery, ADRESH, ADRESL, convert_voltage(ADRESH, ADRESL));
                 __delay_ms(300);
                 termination(elapsed_time);
             }
@@ -205,66 +218,19 @@ void main(void) {
             
             while(menu == logA) {
                 di();
-                __lcd_home();
-                
-                uint16_t address = 0;
-                unsigned int AA_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int C_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Nine_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Drain_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int elapsed_time = Eeprom_ReadByte(address);
-                
-                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
-                __lcd_newline();
-                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                show_log(0);
                 ei();
             }
             
             while(menu == logB) {
                 di();
-                __lcd_home();
-                
-                uint16_t address = 40;
-                unsigned int AA_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int C_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Nine_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Drain_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int elapsed_time = Eeprom_ReadByte(address);
-                
-                
-                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
-                __lcd_newline();
-                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                show_log(40);
                 ei();
             }
             
             while(menu == logC) {
                 di();
-                __lcd_home();
-                
-                uint16_t address = 80;
-                unsigned int AA_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int C_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Nine_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int Drain_num = Eeprom_ReadByte(address);
-                address = next_address(address);
-                unsigned int elapsed_time = Eeprom_ReadByte(address);
-                
-                
-                printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
-                __lcd_newline();
-                printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+                show_log(80);
                 ei();
             }
             
@@ -478,7 +444,7 @@ int calculate_elapsed_time(unsigned char* time) {
  * @param time_now [description]
  */
 void termination(unsigned int time_now) {
-    if (time_now > 50) { extern unsigned int is_wait; is_wait = 1; }
+    if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
 }
 
 /**
@@ -491,6 +457,18 @@ void readADC(char channel) {
     ADON = 1;
     ADCON0bits.GO = 1;
    while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}    
+}
+
+/**
+ * 
+ * @param high
+ * @param low
+ * @return 
+ */
+float convert_voltage(unsigned int high, unsigned int low) {
+    // highest reading is 3ff or 1023
+    int reading = high*16*16 + low;
+    return reading * 5.0 / 1023;
 }
 
 /**
@@ -532,7 +510,7 @@ uint8_t Eeprom_ReadByte(uint16_t address) {
  * @param address
  * @param data
  */
-void Eeprom_WriteByte(uint16_t address, uint8_t data) {    
+void Eeprom_`WriteByte(uint16_t address, uint8_t data) {    
     // Set address registers
     EEADRH = (uint8_t)(address >> 8);
     EEADR = (uint8_t)address;
@@ -565,4 +543,79 @@ void Eeprom_WriteByte(uint16_t address, uint8_t data) {
  */
 uint16_t next_address(uint16_t address) {
     return address + 8;
+}
+
+/**
+ * 
+ * @param log_address
+ */
+void show_log(uint16_t log_address) {
+    // read in log address and start fetching historical data
+    uint16_t address = log_address;
+    __lcd_home();
+    
+    unsigned int AA_num = Eeprom_ReadByte(address);
+    address = next_address(address);
+    unsigned int C_num = Eeprom_ReadByte(address);
+    address = next_address(address);
+    unsigned int Nine_num = Eeprom_ReadByte(address);
+    address = next_address(address);
+    unsigned int Drain_num = Eeprom_ReadByte(address);
+    address = next_address(address);
+    unsigned int elapsed_time = Eeprom_ReadByte(address);
+    
+    printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
+    __lcd_newline();
+    printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
+}
+
+/**
+ * 
+ * @param loop_duration
+ * @param delay_length
+ */
+void move_stepper(unsigned int loop_duration, unsigned int duty) {
+    for(unsigned int i = 0; i < loop_duration; i++) {
+        LATCbits.LATC0 = 1;
+        LATCbits.LATC1 = 1;
+        __delay_us(500);
+        LATCbits.LATC0 = 0;
+        __delay_us(500);
+        __delay_ms(10);
+        
+    }
+}
+
+/**
+ * 
+ * @param loop_duration
+ * @param duty
+ */
+void move_servo(unsigned int loop_duration, unsigned int duty) {
+    //__lcd_home();
+    //printf("servo moving");
+    //for(unsigned int i = 0; i < loop_duration; i++) {
+        LATCbits.LATC5 = 1;
+        //__delay_ms(500);
+        __delay_us(5);
+        LATCbits.LATC5 = 0;
+        __delay_ms(500);
+        //__delay_us(5);
+    //}
+}
+
+/**
+ * 
+ * @param duration
+ * @param duty
+ */
+void move_dc(unsigned int duration, unsigned int duty) {
+    for(unsigned int i = 0; i < duration; i++) {
+        LATCbits.LATC2 = 1;
+        LATCbits.LATC0 = 1;
+        LATCbits.LATC1 = 0;
+        __delay_ms(5);
+        LATCbits.LATC2 = 0;
+        __delay_ms(5);
+    }
 }

@@ -1,17 +1,17 @@
 
 # 1 "lcd.c"
 
-# 26 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\htc.h"
+# 26 "/Applications/microchip/xc8/v1.40/include/htc.h"
 extern const char __xc8_OPTIM_SPEED;
 
 extern double __fpnormalize(double);
 
 
-# 13 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\xc8debug.h"
+# 13 "/Applications/microchip/xc8/v1.40/include/xc8debug.h"
 #pragma intrinsic(__builtin_software_breakpoint)
 extern void __builtin_software_breakpoint(void);
 
-# 49 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18f4620.h"
+# 49 "/Applications/microchip/xc8/v1.40/include/pic18f4620.h"
 extern volatile unsigned char PORTA @ 0xF80;
 
 asm("PORTA equ 0F80h");
@@ -3614,7 +3614,7 @@ extern volatile __bit nWR @ (((unsigned) &PORTE)*8) + 1;
 
 extern volatile __bit nWRITE @ (((unsigned) &SSPSTAT)*8) + 2;
 
-# 18 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\pic18.h"
+# 18 "/Applications/microchip/xc8/v1.40/include/pic18.h"
 __attribute__((__unsupported__("The " "flash_write" " routine is no longer supported. Please use the MPLAB X MCC."))) void flash_write(const unsigned char *, unsigned int, __far unsigned char *);
 __attribute__((__unsupported__("The " "EraseFlash" " routine is no longer supported. Please use the MPLAB X MCC."))) void EraseFlash(unsigned long startaddr, unsigned long endaddr);
 
@@ -3693,10 +3693,10 @@ extern __nonreentrant void _delay3(unsigned char);
 
 #pragma config EBTRB = OFF
 
-# 4 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\__size_t.h"
+# 4 "/Applications/microchip/xc8/v1.40/include/__size_t.h"
 typedef unsigned size_t;
 
-# 14 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\string.h"
+# 14 "/Applications/microchip/xc8/v1.40/include/string.h"
 extern void * memcpy(void *, const void *, size_t);
 extern void * memmove(void *, const void *, size_t);
 extern void * memset(void *, int, size_t);
@@ -3728,7 +3728,7 @@ extern char * strichr(const char *, int);
 extern char * strrchr(const char *, int);
 extern char * strrichr(const char *, int);
 
-# 7 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\stdarg.h"
+# 7 "/Applications/microchip/xc8/v1.40/include/stdarg.h"
 typedef void * va_list[1];
 
 #pragma intrinsic(__va_start)
@@ -3737,17 +3737,17 @@ extern void * __va_start(void);
 #pragma intrinsic(__va_arg)
 extern void * __va_arg(void *, ...);
 
-# 43 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\stdio.h"
+# 43 "/Applications/microchip/xc8/v1.40/include/stdio.h"
 struct __prbuf
 {
 char * ptr;
 void (* func)(char);
 };
 
-# 29 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\errno.h"
+# 29 "/Applications/microchip/xc8/v1.40/include/errno.h"
 extern int errno;
 
-# 12 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\conio.h"
+# 12 "/Applications/microchip/xc8/v1.40/include/conio.h"
 extern void init_uart(void);
 
 extern char getch(void);
@@ -3761,7 +3761,7 @@ extern __bit kbhit(void);
 extern char * cgets(char *);
 extern void cputs(const char *);
 
-# 88 "D:\Program Files (x86)\Microchip\xc8\v1.40\include\stdio.h"
+# 88 "/Applications/microchip/xc8/v1.40/include/stdio.h"
 extern int cprintf(char *, ...);
 #pragma printf_check(cprintf)
 
