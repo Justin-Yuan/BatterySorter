@@ -101,17 +101,34 @@ void main(void) {
     ADCON1 = 0xFF;  //Set PORTB to be digital instead of analog default  
     
     nRBPU = 0;
-    INT1IE = 1;
+    INT1IE = 1;	    //enable external interrupt for keypad
+    INT1IF = 0;	    //turn off external interrupt flag
     
     ADCON0 = 0x00;  //Disable ADC
     ADCON1 = 0x1B;  //AN0 to AN3 used as analog input
     //CVRCON = 0x00; // Disable CCP reference voltage output
     CMCONbits.CIS = 0;
     ADFM = 1;
+
+    GIE = 1;        //globally enable interrupt
+    PEIE = 1;       //enable peripheral interrupt
+    TMR0IE = 1;     //enable TMR0 overflow interrupt
+    TMR0IF = 0;	    //turn off TMR0 overflow interrupt flag
+    TMR1IE = 1;     //enable TMR1 overflow interrupt
+    TMR1IF = 0;     //turn off TMR1 overflow interrupt flag
+
+    // intialize timers for interrupt 
+    // timer 0 
+    T0CON = 0b00000111;
+    TMR0 = 55770;
+    // timer 1
+    T1CON = 0b10000000;
+    TMR1 = 58035;
+    // timer 2
     
     ei();           //Enable all interrupts
     //</editor-fold>
-    
+
     
     // initializations and prompt to start
     di();
@@ -132,6 +149,7 @@ void main(void) {
             set_time();
 
             unsigned int is_battery = 1;
+            unsigned int is_hit = 0;
             
 /*
             OSCCON = 0xF0;  //8MHz
@@ -186,10 +204,6 @@ void main(void) {
                     C_num += 2;
                     Nine_num += 3;
                     Drain_num += 4;
-                    
-                    //move_stepper(100,5);
-                    //move_servo(100, 5);
-                    //move_dc(100, 5);
                 }
                 
                 current_time(time);
@@ -617,5 +631,18 @@ void move_dc(unsigned int duration, unsigned int duty) {
         __delay_ms(5);
         LATCbits.LATC2 = 0;
         __delay_ms(5);
+    }
+}
+
+void interrupt high_priority isr(void) {
+    if(INT1IF) {
+        __lcd_clear();
+        unsigned char keypress = (PORTB & 0xF0) >> 4;
+        select_menu(keys[keypress]);
+        INT1IF = 0;     //Clear flag bit
+    }
+
+    if () {
+
     }
 }
