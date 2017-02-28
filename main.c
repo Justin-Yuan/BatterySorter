@@ -43,9 +43,11 @@ uint8_t Eeprom_ReadByte(uint16_t);
 void Eeprom_WriteByte(uint16_t, uint8_t);
 uint16_t next_address(uint16_t);
 void show_log(uint16_t);
+// <TODO>
 void move_stepper(unsigned int loop_duration, unsigned int duty);
 void move_servo(unsigned int loop_duration, unsigned int duty);
 void move_dc(unsigned int duration, unsigned int duty);
+//</TODO>
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -142,7 +144,7 @@ void main(void) {
     while(1) {
 
         if(is_active) {
-            LATCbits.LATC6 = 1; //RC0 = 1 , free keypad pins
+            LATCbits.LATC6 = 1; //RC6 = 1 , free keypad pins
             unsigned char time[7];
             elapsed_time = 1;
             clean_count();
@@ -457,7 +459,7 @@ int calculate_elapsed_time(unsigned char* time) {
  * [termination description]
  * @param time_now [description]
  */
-void termination(unsigned int time_now) {
+void is_termination(unsigned int time_now) {
     if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
 }
 
@@ -583,29 +585,13 @@ void show_log(uint16_t log_address) {
     printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
 }
 
-/**
- * 
- * @param loop_duration
- * @param delay_length
- */
-void move_stepper(unsigned int loop_duration, unsigned int duty) {
-    for(unsigned int i = 0; i < loop_duration; i++) {
-        LATCbits.LATC0 = 1;
-        LATCbits.LATC1 = 1;
-        __delay_us(500);
-        LATCbits.LATC0 = 0;
-        __delay_us(500);
-        __delay_ms(10);
-        
-    }
-}
 
 /**
  * 
  * @param loop_duration
  * @param duty
  */
-void move_servo(unsigned int loop_duration, unsigned int duty) {
+void move_servo(unsigned int loop_duration, unsigned int duty) { // two inputs, direction and fake pwm 
     //__lcd_home();
     //printf("servo moving");
     //for(unsigned int i = 0; i < loop_duration; i++) {
@@ -623,7 +609,7 @@ void move_servo(unsigned int loop_duration, unsigned int duty) {
  * @param duration
  * @param duty
  */
-void move_dc(unsigned int duration, unsigned int duty) {
+void move_dc(unsigned int duration, unsigned int duty) { // one high input 
     for(unsigned int i = 0; i < duration; i++) {
         LATCbits.LATC2 = 1;
         LATCbits.LATC0 = 1;
@@ -635,6 +621,7 @@ void move_dc(unsigned int duration, unsigned int duty) {
 }
 
 void interrupt high_priority isr(void) {
+    // interrupt for keypad input 
     if(INT1IF) {
         __lcd_clear();
         unsigned char keypress = (PORTB & 0xF0) >> 4;
@@ -642,7 +629,39 @@ void interrupt high_priority isr(void) {
         INT1IF = 0;     //Clear flag bit
     }
 
-    if () {
+    // interrupt for elapsed time counter 
+    if(is_active && TMR0IF) {
+        TMR0IF = 0;     //clear interrupt bit 
+        TMR0 = 55770;   //reset timer 0 count 
+
+        is_termination();
+    }
+    
+    // interrupt for background operations 
+    if(is_active && TMR1IF) {
+        TMR1IF = 0;     //clear interrupt bit 
+        TMR1 = 58035;   //reset timer 1 count
+
 
     }
+}   
+
+
+void move_stepper(unsigned int duration) {
+    for(unsigned int i = 0; i < duration; i++) {
+        LATCbits.LATC0 = 1;     // speed output pin 
+        LATCbits.LATC1 = 1;     // direction output pin 
+        __delay_us(500);
+        LATCbits.LATC0 = 0;     // 
+        __delay_us(500);
+        __delay_ms(10);   
+    }
+}
+
+void move_servo() {
+
+}
+
+void move_dc() {
+
 }
