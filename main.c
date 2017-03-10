@@ -35,7 +35,7 @@ void set_time(void);
 void current_time(unsigned char*);
 void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
-void termination(unsigned int);
+int is_termination(unsigned int);
 void readADC(char);
 float convert_voltage(unsigned int, unsigned int);
 void clean_count(void);
@@ -44,9 +44,13 @@ void Eeprom_WriteByte(uint16_t, uint8_t);
 uint16_t next_address(uint16_t);
 void show_log(uint16_t);
 // <TODO>
-void move_stepper(unsigned int loop_duration, unsigned int duty);
-void move_servo(unsigned int loop_duration, unsigned int duty);
-void move_dc(unsigned int duration, unsigned int duty);
+void pulse_delay(unsigned int pulse);
+void move_stepper1();
+void move_stepper_angle(unsigned int, unsigned int);
+void move_servo1(unsigned int);
+void move_servo2(unsigned int);
+void move_dc1();
+void move_dc1();
 //</TODO>
 
 // global constant variables
@@ -83,6 +87,9 @@ unsigned int is_wait = 0;
 
 // log info
 unsigned int log = 0;
+
+int motorstep = 0;
+
 
 // main function 
 void main(void) {
@@ -134,7 +141,7 @@ void main(void) {
     
     // initializations and prompt to start
     di();
-    I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
+    //I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
     initLCD();
     uint16_t address = 0;
     ei();
@@ -148,10 +155,12 @@ void main(void) {
             unsigned char time[7];
             elapsed_time = 1;
             clean_count();
-            set_time();
+           // set_time();
 
             unsigned int is_battery = 1;
             unsigned int is_hit = 0;
+           // T0CONbits.TMR0ON = 1;   //turn on timers
+            T1CONbits.TMR1ON = 1; 
             
 /*
             OSCCON = 0xF0;  //8MHz
@@ -188,7 +197,9 @@ void main(void) {
                 
 */          
                 is_battery = PORTAbits.RA4 ;
-                move_stepper(100,5);
+                //move_stepper(100,5);
+                
+                LATCbits.LATC0 = 1;
                 
                 //readADC(2);
                 //__delay_1s();
@@ -208,13 +219,18 @@ void main(void) {
                     Drain_num += 4;
                 }
                 
-                current_time(time);
-                elapsed_time = calculate_elapsed_time(time);
-                printf(" %3d %d %x %x %f", elapsed_time, is_battery, ADRESH, ADRESL, convert_voltage(ADRESH, ADRESL));
-                __delay_ms(300);
-                termination(elapsed_time);
-            }
+//                current_time(time);
+//                elapsed_time = calculate_elapsed_time(time);
+//                printf(" %3d %d %x %x %f", elapsed_time, is_battery, ADRESH, ADRESL, convert_voltage(ADRESH, ADRESL));
+//                __delay_ms(300);
+//                termination(elapsed_time);
+                __lcd_clear();
+                __lcd_home();
+                printf("%d", elapsed_time);
+                __delay_ms(10);
+                is_wait = is_termination(elapsed_time);
             
+            }
             // EEPROM logging 
             Eeprom_WriteByte(address, AA_num);
             address = next_address(address);
@@ -227,9 +243,13 @@ void main(void) {
             Eeprom_WriteByte(address, elapsed_time);
             address = next_address(address);
 
-            LATCbits.LATC0 = 0; // RC1 = 0 enable keypad 
+            LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
+            LATCbits.LATC0 = 0;
             is_wait = !is_wait;
-            is_active = !is_active; // reset the operation flag 
+            is_active = !is_active; // reset the operation flag
+
+            T0CONbits.TMR0ON = 0;   //turn off timers
+            T1CONbits.TMR1ON = 0; 
         } else if (log != 0) {
             
             while(menu == logA) {
@@ -348,14 +368,14 @@ void set_time(void) {
  * [keypressed description]
  * @return  [description]
  */
-void interrupt keypressed(void) {
-    if(INT1IF){
-        __lcd_clear();
-        unsigned char keypress = (PORTB & 0xF0) >> 4;
-        select_menu(keys[keypress]);
-        INT1IF = 0;     //Clear flag bit
-    }
-}
+//void interrupt keypressed(void) {
+//    if(INT1IF){
+//        __lcd_clear();
+//        unsigned char keypress = (PORTB & 0xF0) >> 4;
+//        select_menu(keys[keypress]);
+//        INT1IF = 0;     //Clear flag bit
+//    }
+//}
 
 /**
  * switch between different menus 
@@ -367,8 +387,11 @@ void select_menu(unsigned char temp) {
     extern unsigned int is_active;
     switch(menu) {
         case HOME:
-            if(temp == '*') {
+            if(temp == '5') {
                 is_active = !is_active;
+                T0CONbits.TMR0ON = 1; //turn on TMR0 
+                T1CONbits.TMR1ON = 1; //TMR1 off when not driving steppers
+
             } else {
                 if(temp == '7'){menu = TIME;} else if(temp == '9'){menu = TOTAL_BAT;}
             }
@@ -459,8 +482,10 @@ int calculate_elapsed_time(unsigned char* time) {
  * [termination description]
  * @param time_now [description]
  */
-void is_termination(unsigned int time_now) {
-    if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
+int is_termination(unsigned int time_now) {
+    // if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
+    if (time_now > 30) { return 1; }
+    else { return 0; }
 }
 
 /**
@@ -526,7 +551,7 @@ uint8_t Eeprom_ReadByte(uint16_t address) {
  * @param address
  * @param data
  */
-void Eeprom_`WriteByte(uint16_t address, uint8_t data) {    
+void Eeprom_WriteByte(uint16_t address, uint8_t data) {    
     // Set address registers
     EEADRH = (uint8_t)(address >> 8);
     EEADR = (uint8_t)address;
@@ -585,43 +610,13 @@ void show_log(uint16_t log_address) {
     printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
 }
 
-
-/**
- * 
- * @param loop_duration
- * @param duty
- */
-void move_servo(unsigned int loop_duration, unsigned int duty) { // two inputs, direction and fake pwm 
-    //__lcd_home();
-    //printf("servo moving");
-    //for(unsigned int i = 0; i < loop_duration; i++) {
-        LATCbits.LATC5 = 1;
-        //__delay_ms(500);
-        __delay_us(5);
-        LATCbits.LATC5 = 0;
-        __delay_ms(500);
-        //__delay_us(5);
-    //}
-}
-
-/**
- * 
- * @param duration
- * @param duty
- */
-void move_dc(unsigned int duration, unsigned int duty) { // one high input 
-    for(unsigned int i = 0; i < duration; i++) {
-        LATCbits.LATC2 = 1;
-        LATCbits.LATC0 = 1;
-        LATCbits.LATC1 = 0;
-        __delay_ms(5);
-        LATCbits.LATC2 = 0;
-        __delay_ms(5);
-    }
-}
-
-void interrupt high_priority isr(void) {
+void interrupt ISR(void) {
     // interrupt for keypad input 
+    
+    extern unsigned int is_active; 
+    extern int motorstep;
+    extern unsigned int elapsed_time;
+    
     if(INT1IF) {
         __lcd_clear();
         unsigned char keypress = (PORTB & 0xF0) >> 4;
@@ -634,7 +629,11 @@ void interrupt high_priority isr(void) {
         TMR0IF = 0;     //clear interrupt bit 
         TMR0 = 55770;   //reset timer 0 count 
 
-        is_termination();
+        elapsed_time++;
+        printf("adfsfd");
+//        printf("%d", is)
+
+        //if(is_termination(elapsed_time)) {is_active = 0;}
     }
     
     // interrupt for background operations 
@@ -642,26 +641,100 @@ void interrupt high_priority isr(void) {
         TMR1IF = 0;     //clear interrupt bit 
         TMR1 = 58035;   //reset timer 1 count
 
-
+//        if(motorstep < 2000) {
+//            move_servo1(motorstep);
+//            motorstep = motorstep + 20;
+//        } else {
+//            motorstep = 1000;
+//        }
+        
+        if(motorstep < 70) {
+            move_stepper1();
+            motorstep++;
+        }
+        
+        //move_servo1(motorstep);
+        //printf("ppp");
+        
+        // move_stepper1();
+        // __delay_ms(10);
+        // move_stepper_angle(1, 100);
+        // move_dc1();
+        // move_dc2();
     }
 }   
 
+/******************************************************************************************************/
+/* motor control codes */
 
-void move_stepper(unsigned int duration) {
-    for(unsigned int i = 0; i < duration; i++) {
-        LATCbits.LATC0 = 1;     // speed output pin 
-        LATCbits.LATC1 = 1;     // direction output pin 
-        __delay_us(500);
-        LATCbits.LATC0 = 0;     // 
-        __delay_us(500);
-        __delay_ms(10);   
+void pulse_delay(unsigned int pulse) {
+    int numDelayPerTenSec;
+    numDelayPerTenSec = (int)(pulse / 10);
+    for(int i = 0; i < numDelayPerTenSec; i++) {
+        __delay_us(10);
     }
 }
 
-void move_servo() {
-
+void move_stepper1() {
+   // for(unsigned int i = 0; i < duration; i++) {
+   //     LATCbits.LATC0 = 1;     // speed output pin 
+   //     LATCbits.LATC1 = 1;     // direction output pin 
+   //     __delay_us(500);
+   //     LATCbits.LATC0 = 0;     // 
+   //     __delay_us(500);
+   //     __delay_ms(10);   
+   // }
+   LATEbits.LATE0 = 1;     // speed output pin 
+   LATEbits.LATE1 = 1;     // direction output pin 
+   __delay_us(500);
+   LATEbits.LATE0 = 0;     // 
+   __delay_us(500);
+   __delay_ms(5);
 }
 
-void move_dc() {
+//void move_stepper_angle(unsigned int stepper_id, unsigned int angle) {
+//    unsigned int duration = angle;
+//    for(unsigned int i = 0; i < duration; i++) {
+//        if(stepper_id == 1) {
+//            move_stepper1();
+//            __delay_ms(5);
+//        } 
+//    }
+//} 
 
+
+void move_servo1(unsigned int pulse) {
+    // RC6 is used for the first servo motor, 5-10% duty cycle(900-2100us pulse width)
+    LATCbits.LATC6 = 1;
+    pulse_delay(pulse);
+    LATCbits.LATC6 = 0;
+    __delay_ms(3);
+}
+
+void move_servo2(unsigned int pulse) {
+    // RC7 is used for the second servo motor, 5-10% duty cycle(900-2100us pulse width)
+    LATCbits.LATC7 = 1;
+    pulse_delay(pulse);
+    LATCbits.LATC7 = 0;
+    __delay_ms(20);
+}
+
+void move_dc1() {
+    // RC0, 1, 2 are used for the first DC motor, no pwm control for now
+    LATCbits.LATC2 = 1;
+    LATCbits.LATC0 = 1;
+    LATCbits.LATC1 = 0;
+    __delay_ms(5);
+    LATCbits.LATC2 = 0;
+    __delay_ms(5);
+}
+
+void move_dc2() {
+    // RC3, 4, 5 are used for the second DC motor, no pwm control for now
+    LATCbits.LATC5 = 1;
+    LATCbits.LATC3 = 1;
+    LATCbits.LATC4 = 0;
+    __delay_ms(5);
+    LATCbits.LATC5 = 0;
+    __delay_ms(5);
 }
