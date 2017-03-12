@@ -44,29 +44,24 @@ float convert_to_valid_voltage(float);
 float get_voltage(char, unsigned int);
 
 void clean_count(void);
-void clean_motor_status();
-
 uint8_t Eeprom_ReadByte(uint16_t);
 void Eeprom_WriteByte(uint16_t, uint8_t);
 uint16_t next_address(uint16_t);
 void show_log(uint16_t);
 // <TODO>
 void pulse_delay(unsigned int pulse);
-void move_stepper1(unsigned int);
-void move_stepper2(unsigned int);
-void move_stepper_angle(unsigned int stepper_id, float angle, unsigned int direction);
+void move_stepper1();
+void move_stepper_angle(unsigned int, unsigned int);
 void move_servo1(unsigned int);
 void move_servo2(unsigned int);
 void move_dc1();
 void move_dc1();
-
-// battery testing stage
+//</TODO>
 unsigned int regulate_signal(unsigned int);
 unsigned int ir(unsigned int, unsigned int); 
 unsigned int microswitch(unsigned int);
 unsigned int test_battery();
-void move_bin(unsigned int);
-void push_battery(unsigned int);
+
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -81,13 +76,17 @@ const char happynewyear[7] = {  0x00, //45 Seconds
 // global variables 
 unsigned int is_active = 0; // run sorting operation
 
+unsigned int started = 0;   // starting flag 
+unsigned int ended = 0;     //ending flag
+unsigned int quit = 0;      // quit info display page 
+
+
 // battery info
 unsigned int total_num = 0;
 unsigned int AA_num = 0;
 unsigned int C_num = 0;
 unsigned int Nine_num = 0;
 unsigned int Drain_num = 0;
-unsigned int previous_type = DRAIN_BAT;
 
 // menu info
 unsigned int menu = HOME;
@@ -98,6 +97,8 @@ unsigned int is_wait = 0;
 
 // log info
 unsigned int log = 0;
+
+int motorstep = 0;
 
 
 // main function 
@@ -134,8 +135,8 @@ void main(void) {
     TMR0IF = 0;	    //turn off TMR0 overflow interrupt flag
     TMR1IE = 1;     //enable TMR1 overflow interrupt
     TMR1IF = 0;     //turn off TMR1 overflow interrupt flag
-    TMR3IE = 1;     //enable TMR2 overflow interrupt
-    TMR3IF = 0;     //turn off TMR2 overflow interrupt flag
+    TMR2IE = 1;     //enable TMR2 overflow interrupt
+    TMR2IF = 0;     //turn off TMR2 overflow interrupt flag
 
     // intialize timers for interrupt 
     // timer 0 
@@ -145,8 +146,8 @@ void main(void) {
     T1CON = 0b10000000;
     TMR1 = 58035;
     // timer 2
-    T3CON = 0b10000000;
-    TMR3 = 53035;  // need to determine the third timer, 65535-0.005*10000000/4
+    T2CON = 0b10000000;
+    //TMR2 = ;  // need to determine the third timer 
     
     ei();           //Enable all interrupts
     //</editor-fold>
@@ -170,42 +171,72 @@ void main(void) {
             clean_count();
            // set_time();
 
-            unsigned int is_battery_bottom = 0;
-            unsigned int is_battery_up = 0;
+            unsigned int is_battery = 1;
             unsigned int is_hit = 0;
-            unsigned int result = 0;
-            float voltage = 0;
-
-            // turn on background timers 
-            T0CONbits.TMR0ON = 1;   
-            T3CONbits.TMR3ON = 1;
-            // turn on control timer
+            T0CONbits.TMR0ON = 1;   //turn on timers
             T1CONbits.TMR1ON = 1; 
+            float voltage = 0;
             
-            // operation loop 
+/*
+            OSCCON = 0xF0;  //8MHz
+            // Set internal oscillator to run at 8 MHZ
+            OSCCON = OSCCON | 0b01110000; 
+            // Enable PLL for the internal oscillator, Processor now runs at 32MHZ
+            OSCTUNEbits.PLLEN = 1; 
+
+            set_PWM_freq (3100);
+    
+            PWM1_Start();
+
+            TRISC = 0x11110001;
+*/
+            
+//            for(unsigned int i = 0; i < 4; i++) {
+//                move_servo(100,5);
+//            }
+            
             while(total_num < 15 && !is_wait) {
-        
-                // testing 
-                // is_battery =  1;
-                // real logic: ir input 
-                is_battery_bottom = ir(1, 5);
-                is_battery_up = ir(2, 5);
+/*
+                // rotate wheel & move conveyor belt
+                LATCbits.LATC5 = 1;
+                LATCbits.LATC6 = 0;
+                set_PWM1_duty(512);
 
-                if(is_battery_bottom && is_battery_up) {
-                    // sorting logic  
-                    result = test_battery();
+                // infrared sensor read input 
+                is_battery = LATAbits.LATA1;
+                __lcd_clear();
+                __lcd_home();
+                printf(" %d ", is_battery);
+                __lcd_newline();
 
+                
+*/          
+                is_battery = PORTAbits.RA4 ;
+                //move_stepper(100,5);
+                
+                //LATCbits.LATC0 = 1;
+                
+                //voltage = get_voltage(2, 50);
+                //__delay_1s();
+
+               // LATCbits.LATC0 = 1;
+                // LATCbits.LATC1 = 1;
+
+
+                
+                if(!is_battery) {
+                   // sorting logic  
+                    readADC(2);
                     // bin selection
-                    move_bin(result);
+
 
                     // push battery
-                    push_battery()
                     
                     // testing 
-                    // AA_num++;
-                    // C_num += 2;
-                    // Nine_num += 3;
-                    // Drain_num += 4;
+                    AA_num++;
+                    C_num += 2;
+                    Nine_num += 3;
+                    Drain_num += 4;
                 }
                 
 //                current_time(time);
@@ -220,7 +251,8 @@ void main(void) {
                 __lcd_newline();
                 //printf("%d", voltage > 0.3);
                 __delay_ms(10);
-                is_wait = is_termination(elapsed_time);         
+                is_wait = is_termination(elapsed_time);
+            
             }
 
             // EEPROM logging 
@@ -235,7 +267,7 @@ void main(void) {
             Eeprom_WriteByte(address, elapsed_time);
             address = next_address(address);
 
-           // LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
+            LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
             
             // testing 
             //LATCbits.LATC0 = 0;
@@ -245,7 +277,6 @@ void main(void) {
             is_active = !is_active; // reset the operation flag
 
             T0CONbits.TMR0ON = 0;   //turn off timers
-            T3CONbits.TMR3ON = 0;
             T1CONbits.TMR1ON = 0; 
         } else if (log != 0) {
             
@@ -536,14 +567,6 @@ void clean_count(void) {
     elapsed_time = 0;
 }
 
-void clean_motor_status() {
-    LATA = 0x00;
-    LATB = 0x00; 
-    LATC = 0x00;
-    LATD = 0x00;
-    LATE = 0x00;
-}
-
 /******************************************************************************************************/
 /* EEPROM storage codes */
 
@@ -639,31 +662,31 @@ void interrupt ISR(void) {
         elapsed_time++;
     }
     
-    // interrupt for fine-grained controls
+    // interrupt for background operations 
     if(is_active && TMR1IF) {
         TMR1IF = 0;     //clear interrupt bit 
         TMR1 = 58035;   //reset timer 1 count
+
+//        if(motorstep < 2000) {
+//            move_servo1(motorstep);
+//            motorstep = motorstep + 20;
+//        } else {
+//            motorstep = 1000;
+//        }
         
         // if(motorstep < 2000) {
            // move_stepper1();
             // motorstep++;
         // }
         
+        //move_servo1(motorstep);
+        //printf("ppp");
+        
         // move_stepper1();
         // __delay_ms(10);
         // move_stepper_angle(1, 100);
-
-        
-    }
-
-    // interrupt for background tasks 
-    if(is_active && TMR3IF) {
-        TMR3IF = 0;     //clear interrupt bit 
-        TMR3 = 53035;   // reset timer 3 count
-
-        // driving two DC motors for the wheel and conveyor belt 
-        move_dc1();
-        move_dc2();
+         move_dc1();
+        // move_dc2();
     }
 }   
 
@@ -679,7 +702,7 @@ void pulse_delay(unsigned int pulse) {
 }
 
 
-void move_stepper1(unsigned int direction) {  
+void move_stepper1() {  // 200 steps per revolution <-> 1 step is 1.8 degree 
    // for(unsigned int i = 0; i < duration; i++) {
    //     LATCbits.LATC0 = 1;     // speed output pin 
    //     LATCbits.LATC1 = 1;     // direction output pin 
@@ -688,48 +711,23 @@ void move_stepper1(unsigned int direction) {
    //     __delay_us(500);
    //     __delay_ms(10);   
    // }
-//    LATEbits.LATE0 = 1;     // speed output pin 
-//    LATEbits.LATE1 = 1;     // direction output pin 
-//    __delay_us(500);
-//    LATEbits.LATE0 = 0;     // 
-//    __delay_us(500);
-//    //__delay_ms(5);
-    LATCbits.LATC0 = !LATCbits.LATC0;
-    LATCbits.LATC1 = direction;
+   LATEbits.LATE0 = 1;     // speed output pin 
+   LATEbits.LATE1 = 1;     // direction output pin 
+   __delay_us(500);
+   LATEbits.LATE0 = 0;     // 
+   __delay_us(500);
+   //__delay_ms(5);
 }
 
-
-void move_stepper2(unsigned int direction) { 
-   // for(unsigned int i = 0; i < duration; i++) {
-   //     LATCbits.LATC0 = 1;     // speed output pin 
-   //     LATCbits.LATC1 = 1;     // direction output pin 
-   //     __delay_us(500);
-   //     LATCbits.LATC0 = 0;     // 
-   //     __delay_us(500);
-   //     __delay_ms(10);   
-   // }
-//    LATEbits.LATE0 = 1;     // speed output pin 
-//    LATEbits.LATE1 = 1;     // direction output pin 
-//    __delay_us(500);
-//    LATEbits.LATE0 = 0;     // 
-//    __delay_us(500);
-//    //__delay_ms(5);
-    LATCbits.LATC3 = !LATCbits.LATC3;
-    LATCbits.LATC4 = direction;
-}
-
-
-void move_stepper_angle(unsigned int stepper_id, float angle, unsigned int direction) {
-    // 200 steps per revolution <-> 1 step is 1.8 degree 
-    unsigned int duration = (int)(angle / 1.8);
-    for(unsigned int i = 0; i < duration; i++) {
-        if(stepper_id == 1) {
-            move_stepper1(direction);
-       } else if(stepper_id == 2) {
-            move_stepper2(direction);
-       }
-   }
-} 
+//void move_stepper_angle(unsigned int stepper_id, unsigned int angle) {
+//    unsigned int duration = angle;
+//    for(unsigned int i = 0; i < duration; i++) {
+//        if(stepper_id == 1) {
+//            move_stepper1();
+//            __delay_ms(5);
+//        } 
+//    }
+//} 
 
 
 void move_servo1(unsigned int pulse) {
@@ -752,25 +750,23 @@ void move_servo2(unsigned int pulse) {
 
 void move_dc1() {
     // RC0, 1, 2 are used for the first DC motor, no pwm control for now
-    LATCbits.LATC2 = !LATCbits.LATC2;
-    // LATCbits.LATC2 = 1;
-    // LATCbits.LATC0 = 1;
-    // LATCbits.LATC1 = 0;
-    // __delay_ms(5);
-    // LATCbits.LATC2 = 0;
-    // __delay_ms(5);
+    LATCbits.LATC2 = 1;
+    LATCbits.LATC0 = 1;
+    LATCbits.LATC1 = 0;
+    __delay_ms(5);
+    LATCbits.LATC2 = 0;
+    __delay_ms(5);
 }
 
 
 void move_dc2() {
     // RC3, 4, 5 are used for the second DC motor, no pwm control for now
-    LATCbits.LATC5 ＝ !LATCbits.LATC5
-    // LATCbits.LATC5 = 1;
-    // LATCbits.LATC3 = 1;
-    // LATCbits.LATC4 = 0;
-    // __delay_ms(5);
-    // LATCbits.LATC5 = 0;
-    // __delay_ms(5);
+    LATCbits.LATC5 = 1;
+    LATCbits.LATC3 = 1;
+    LATCbits.LATC4 = 0;
+    __delay_ms(5);
+    LATCbits.LATC5 = 0;
+    __delay_ms(5);
 }
 
 /******************************************************************************************************/
@@ -896,52 +892,28 @@ unsigned int test_battery() {
 }
 
 
-void move_bin(unsigned int bat_type) {
-    extern previous_type;
-    switch(bat_type) {
-        case AA_BAT:
-            if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 90, 0);
-            } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 90, 1);
-            } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 180, 0);
-            }
-            break;
-        case C_BAT: 
-            if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 180, 0);
-            } else if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 90, 0);
-            } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 90, 1)
-            }
-            break;
-        case NINE_BAT:
-            if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 90, 1);
-            } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 90, 0);
-            } else if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 180, 0)
-            }
-            break;
-        case DRAIN_BAT:
-            if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 90, 1);
-            } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 180, 0);
-            } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 90, 0)
-            }
-            break;
-        default:    // default should be drained battery due to a higher probability
-            break; 
-    }
-    previous_type = bat_type;
-}
-
-
-void push_battery(unsigned int signal) {
+// void push_battery(unsigned int signal) {
     
-}
+// }
+
+
+// void move_bin(unsigned int bat_type) {
+//     switch(bat_type) {
+//         case AA_BAT:
+
+//             break;
+//         case C_BAT: 
+
+//             break;
+//         case NINE_BAT:
+
+//             break;
+//         case DRAIN_BAT:
+
+//             break;
+//         default:    // default should be drained battery due to a higher probability
+
+//             break; 
+//     }
+// }
+
