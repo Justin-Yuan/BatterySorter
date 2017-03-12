@@ -37,7 +37,11 @@ void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
 int is_termination(unsigned int);
 void readADC(char);
-float convert_voltage(unsigned int, unsigned int);
+// float convert_voltage(unsigned int, unsigned int);
+float convert_voltage();
+float average_voltage(unsigned int);
+float convert_to_valid_voltage(float);
+
 void clean_count(void);
 uint8_t Eeprom_ReadByte(uint16_t);
 void Eeprom_WriteByte(uint16_t, uint8_t);
@@ -114,8 +118,8 @@ void main(void) {
     INT1IF = 0;	    //turn off external interrupt flag
     
     ADCON0 = 0x00;  //Disable ADC
-    ADCON1 = 0x1B;  //AN0 to AN3 used as analog input
-    //CVRCON = 0x00; // Disable CCP reference voltage output
+    ADCON1 = 0x0B;  //AN0 to AN3 used as analog input
+    CVRCON = 0x00; // Disable CCP reference voltage output
     CMCONbits.CIS = 0;
     ADFM = 1;
 
@@ -161,6 +165,7 @@ void main(void) {
             unsigned int is_hit = 0;
            // T0CONbits.TMR0ON = 1;   //turn on timers
             T1CONbits.TMR1ON = 1; 
+            float voltage = 0;
             
 /*
             OSCCON = 0xF0;  //8MHz
@@ -199,10 +204,16 @@ void main(void) {
                 is_battery = PORTAbits.RA4 ;
                 //move_stepper(100,5);
                 
-                LATCbits.LATC0 = 1;
+                //LATCbits.LATC0 = 1;
                 
-                //readADC(2);
+                readADC(2);
+                voltage = convert_to_valid_voltage(average_voltage(50));
                 //__delay_1s();
+
+                LATCbits.LATC0 = 1;
+                LATCbits.LATC1 = 1;
+
+
                 
                 if(!is_battery) {
                    // sorting logic  
@@ -227,6 +238,9 @@ void main(void) {
                 __lcd_clear();
                 __lcd_home();
                 printf("%d", elapsed_time);
+                printf("  %f", voltage);
+                __lcd_newline();
+                printf("%d", voltage > 0.3);
                 __delay_ms(10);
                 is_wait = is_termination(elapsed_time);
             
@@ -245,6 +259,7 @@ void main(void) {
 
             LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
             LATCbits.LATC0 = 0;
+            LATCbits.LATC1 = 0;
             is_wait = !is_wait;
             is_active = !is_active; // reset the operation flag
 
@@ -275,7 +290,7 @@ void main(void) {
             while(menu == HOME && !is_active) {
                 di();
                 __lcd_home();
-                printf("press * to run");
+                printf("press 5 to run");
                 __lcd_newline();
                 printf("<< 7 DATA 9 >>");
                 ei();
@@ -349,7 +364,7 @@ void main(void) {
     return ;   
 }
 
-
+/******************************************************************************************************/
 
 /**
  * [set_time description]
@@ -441,6 +456,9 @@ void select_menu(unsigned char temp) {
     } 
 }
 
+/******************************************************************************************************/
+/* old timer codes */
+
 /**
  * [current_time description]
  * @param time [description]
@@ -488,29 +506,40 @@ int is_termination(unsigned int time_now) {
     else { return 0; }
 }
 
-/**
- * 
- * @param channel
- */
+/******************************************************************************************************/
+/* voltage reading codes */
+
 void readADC(char channel) {
     // Select A2D channel to read
     ADCON0 = ((channel <<2));
     ADON = 1;
     ADCON0bits.GO = 1;
-   while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}    
+    while(ADCON0bits.GO_NOT_DONE){__delay_ms(5);}    
 }
 
-/**
- * 
- * @param high
- * @param low
- * @return 
- */
-float convert_voltage(unsigned int high, unsigned int low) {
+float convert_voltage() { //(unsigned int high, unsigned int low) {
     // highest reading is 3ff or 1023
-    int reading = high*16*16 + low;
-    return reading * 5.0 / 1023;
+    int reading = ADRESH*16*16 + ADRESL;
+    return (float)(reading * 5.0 / 1023);
+    // return ((ADRESH<<8)+ADRESL);
+    // return __bcd_to_num(ADRESL)
 }
+
+float average_voltage(unsigned int average_span) {
+    float vol = 0;
+    for(unsigned int i = 0; i < average_span; i++) {
+        vol += convert_voltage();
+        __delay_ms(5);
+    }
+    return vol/average_span;
+}
+
+float convert_to_valid_voltage(float raw_voltage) {
+    return ((float)((int)(raw_voltage * 1000)))/1000.0;
+}
+
+/******************************************************************************************************/
+/* clean-up codes */
 
 /**
  * 
@@ -523,6 +552,9 @@ void clean_count(void) {
     Drain_num = 0;
     elapsed_time = 0;
 }
+
+/******************************************************************************************************/
+/* EEPROM storage codes */
 
 /**
  * 
@@ -610,6 +642,9 @@ void show_log(uint16_t log_address) {
     printf("D:%d time:%d 8>>", Drain_num, elapsed_time);
 }
 
+/******************************************************************************************************/
+/* interrupt codes */
+
 void interrupt ISR(void) {
     // interrupt for keypad input 
     
@@ -630,7 +665,7 @@ void interrupt ISR(void) {
         TMR0 = 55770;   //reset timer 0 count 
 
         elapsed_time++;
-        printf("adfsfd");
+        // printf("adfsfd");
 //        printf("%d", is)
 
         //if(is_termination(elapsed_time)) {is_active = 0;}
@@ -738,3 +773,72 @@ void move_dc2() {
     LATCbits.LATC5 = 0;
     __delay_ms(5);
 }
+
+/******************************************************************************************************/
+/* battery testing codes */
+/*
+void test_battery() {
+    extern unsigned int AA_num, C_num, Nine_num, Drain_num, total_num;
+    float D1, D2;
+    
+    // Step 0: reset relays, open 1, 2, 3, 4
+    TRISA = 0b1111000;
+    LATAbits.RA7 = 0;
+    LATAbits.RA6 = 0;
+    LATAbits.RA5 = 0;
+    LATAbits.RA4 = 0;
+
+    // Step 1: close relay 3, check D1, if voltage -> 9V, ... , open 3
+    LATAits.RA7 = 1;
+    readADC(2);
+    D1 = convert_voltage(ADRESH, ADRESL);
+    if (D1 > 3.8) {
+        Nine_num++;
+        total_num++;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    LATAbits.RA7 = 0;
+
+    // Step 2: close relay 2, check D1, if voltage -> 9V, ... , open 2
+    LATAbits.RA6 = 1;
+    readADC(2);
+    D1 = convert_voltage(ADRESH, ADRESL);
+    if (D1 > 0.6) {
+        Nine_num++;
+        total_num++;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    LATAbits.RA6 = 0;
+
+    // Step 3: close 1 and 4, check D1, if voltage -> C; check D2, if voltage -> AA, open 1 and 4
+    LATAbits.RA5 = 1;
+    LATAbits.RA4 = 1;
+    readADC(2);
+    D1 = convert_voltage(ADRESH, ADRESL);
+    if (D1 > 0.6) {
+        C_num++;
+        total_num++;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    readADC(3);
+    D2 = convert_voltage(ADRESH, ADRESL
+    if (D2 > 0.6) {
+        AA_num++;
+        total_num++;
+    } else 
+    LATAbits.RA5 = 0;
+    LATAbits.RA4 = 0;
+
+    // Step 4: if no voltage, an ir sensor == 1 -> dead battery 
+
+
+
+
+
+}*/
