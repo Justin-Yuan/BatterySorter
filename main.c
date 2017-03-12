@@ -36,11 +36,12 @@ void current_time(unsigned char*);
 void select_menu(unsigned char);
 int calculate_elapsed_time(unsigned char*);
 int is_termination(unsigned int);
+
 void readADC(char);
-// float convert_voltage(unsigned int, unsigned int);
 float convert_voltage();
 float average_voltage(unsigned int);
 float convert_to_valid_voltage(float);
+float get_voltage(char, unsigned int);
 
 void clean_count(void);
 uint8_t Eeprom_ReadByte(uint16_t);
@@ -56,6 +57,8 @@ void move_servo2(unsigned int);
 void move_dc1();
 void move_dc1();
 //</TODO>
+void test_battery();
+
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
@@ -206,8 +209,7 @@ void main(void) {
                 
                 //LATCbits.LATC0 = 1;
                 
-                readADC(2);
-                voltage = convert_to_valid_voltage(average_voltage(50));
+                voltage = get_voltage(2, 50);
                 //__delay_1s();
 
                 LATCbits.LATC0 = 1;
@@ -538,6 +540,11 @@ float convert_to_valid_voltage(float raw_voltage) {
     return ((float)((int)(raw_voltage * 1000)))/1000.0;
 }
 
+float get_voltage(char channel, unsigned int average_span) {
+    readADC(channel);
+    return convert_to_valid_voltage(average_voltage(average_span));
+} 
+
 /******************************************************************************************************/
 /* clean-up codes */
 
@@ -776,69 +783,74 @@ void move_dc2() {
 
 /******************************************************************************************************/
 /* battery testing codes */
-/*
+
 void test_battery() {
     extern unsigned int AA_num, C_num, Nine_num, Drain_num, total_num;
-    float D1, D2;
+    float D = 0;    // voltage reading D
     
-    // Step 0: reset relays, open 1, 2, 3, 4
-    TRISA = 0b1111000;
-    LATAbits.RA7 = 0;
-    LATAbits.RA6 = 0;
-    LATAbits.RA5 = 0;
-    LATAbits.RA4 = 0;
+    // Step 1: reset relays, open 1, 2, 3, 4, 5, 6
+    TRISA = 0b11110011;
+    LATAbits.RA7 = 0;   // relay 1
+    LATAbits.RA6 = 0;   // relay 2
+    LATAbits.RA5 = 0;   // relay 3
+    LATAbits.RA4 = 0;   // relay 4
+    LATAbits.RA1 = 0;   // relay 5
+    LATAbits.RA0 = 0;   // relay 6
 
-    // Step 1: close relay 3, check D1, if voltage -> 9V, ... , open 3
-    LATAits.RA7 = 1;
-    readADC(2);
-    D1 = convert_voltage(ADRESH, ADRESL);
-    if (D1 > 3.8) {
-        Nine_num++;
-        total_num++;
-    } else {
-        Drain_num++;
-        total_num++;
-    }
-    LATAbits.RA7 = 0;
-
-    // Step 2: close relay 2, check D1, if voltage -> 9V, ... , open 2
-    LATAbits.RA6 = 1;
-    readADC(2);
-    D1 = convert_voltage(ADRESH, ADRESL);
-    if (D1 > 0.6) {
-        Nine_num++;
-        total_num++;
-    } else {
-        Drain_num++;
-        total_num++;
-    }
-    LATAbits.RA6 = 0;
-
-    // Step 3: close 1 and 4, check D1, if voltage -> C; check D2, if voltage -> AA, open 1 and 4
+    // Step 2: close relay 1 and 3, check D, if voltage -> 9V, open 1 and 3
+    LATAbits.RA7 = 1;
     LATAbits.RA5 = 1;
+    D = get_voltage(2, 50);
+    if (D > 3.82) {
+        Nine_num++;
+        total_num++;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    LATAbits.RA7 = 0;
+    LATAbits.RA5 = 0;
+
+    // Step 3: close relay 4 and 6, check D, if voltage -> 9V, open 4 and 6
     LATAbits.RA4 = 1;
-    readADC(2);
-    D1 = convert_voltage(ADRESH, ADRESL);
-    if (D1 > 0.6) {
+    LATAbits.RA0 = 1;
+    D = get_voltage(2, 50);
+    if (D > 3.82) {
+        Nine_num++;
+        total_num++;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    LATAbits.RA4 = 0;
+    LATAbits.RA0 = 0;
+
+    // Step 4: close relay 3 and 5, check D, if voltage -> C, open 3 and 5 
+    LATAbits.RA5 = 1;
+    LATAbits.RA1 = 1;
+    D = get_voltage(2, 50);
+    if (D > 0.63) {
         C_num++;
         total_num++;
     } else {
         Drain_num++;
         total_num++;
     }
-    readADC(3);
-    D2 = convert_voltage(ADRESH, ADRESL
-    if (D2 > 0.6) {
+    LATAbits.RA5 = 0;
+    LATAbits.RA1 = 0;
+
+    // Step 5: close relay 2 and 6, check D, if voltage -> AA, open 2 and 6 
+    LATAbits.RA6 = 1;
+    LATAbits.RA0 = 1;
+    D = convert_voltage(2, 50);
+    if (D > 0.63) {
         AA_num++;
         total_num++;
-    } else 
-    LATAbits.RA5 = 0;
-    LATAbits.RA4 = 0;
+    } else {
+        Drain_num++;
+        total_num++;
+    }
+    LATAbits.RA6 = 0;
+    LATAbits.RA0 = 0;
 
-    // Step 4: if no voltage, an ir sensor == 1 -> dead battery 
-
-
-
-
-
-}*/
+}
