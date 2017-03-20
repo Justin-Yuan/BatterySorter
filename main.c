@@ -238,7 +238,7 @@ void main(void) {
                 // if(is_battery_bottom && !is_battery_up) {
                 //     // pusher up 
                 //     while(!is_battery_up) {
-                //         move_stepper_angle(1, 180, 1);
+                //         move_stepper(1, 1);
                 //         is_battery_up = ir(2, 5);
                 //     }
                 // }
@@ -261,7 +261,7 @@ void main(void) {
                     
                 //     // pusher down
                 //     while(!is_hit) {
-                //         move_stepper_angle(1, 180, 0);
+                //         move_stepper(2, 1);
                 //         is_hit = microswitch(5);
                 //     }
                 // }
@@ -303,8 +303,8 @@ void main(void) {
                 if (is_battery_up) {
                     move_probes(TEST, 300);
                     if (stepper1_active == 0) {
-                        move_stepper(2, 1);
-                        move_stepper(1, 2);
+                        move_stepper_angle(1, 90, 1);
+                        move_stepper_angle(2, 360, 0);
                     }
                 }
 
@@ -935,16 +935,10 @@ void set_stepper_duration(char channel, unsigned int duration) {
 
 
 void move_stepper_angle(char channel, float angle, char direction) {
-    // 200 steps per revolution <-> 1 step is 1.8 degree 
-    unsigned int duration = (int)(angle / 1.8);
-    for(unsigned int i = 0; i < duration; i++) {
-        if(channel == 1) {
-            move_stepper1(direction, channel);
-       } else if(channel == 2) {
-            move_stepper2(direction);
-       }
-   }
-   clear_stepper(stepper_id);
+    unsigned int duration = angle;  // a function of angle and stepper specs 
+    unsigned int command = ((direction == 1)? 1 : 2);
+    set_stepper_duration(channel, duration);
+    move_stepper(command, channel);
 } 
 
 
