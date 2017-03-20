@@ -59,13 +59,13 @@ void pulse_delay(unsigned int);
 void set_servo_duration(char, char, unsigned int);
 void move_stepper1(unsigned int);
 void move_stepper2(unsigned int);
-void clear_stepper(char channel);
+void clear_stepper(char);
+void set_stepper_duration(char, unsigned int);
 void move_stepper_angle(unsigned int, float, unsigned int);
 void move_dc1();
-void move_dc2();
+void move_dc2(char);
 void move_servo(unsigned int);
-void move_stepper(unsigned int command, char channel);
-
+void move_stepper(unsigned int, char);
 
 
 // battery testing stage
@@ -84,7 +84,7 @@ unsigned int servo2_high_duration = 3;
 unsigned int servo2_low_duration = 37;
 
 const unsigned int stepper1_duration = 5000;    // pusher operation time 5s 
-const unsigned int stepper2_degree = 100;
+const unsigned int stepper2_duration = 100;
 
 const char keys[] = "123A456B789C*0#D"; 
 const char happynewyear[7] = {  0x00, //45 Seconds 
@@ -128,12 +128,12 @@ unsigned int servo2_low = 0;
 unsigned int stepper1_active = 0;   // standby: 0, positive spin: 1, negative spin: 2
 unsigned int stepper1_duration_count = 0;     
 unsigned int stepper2_active = 0;
-unsigned int stepper2_degree_count = 0;
+unsigned int stepper2_duration_count = 0;
 
 // main function 
 void main(void) {
     // <editor-fold defaultstate="collapsed" desc=" STARTUP SEQUENCE ">
-    TRISA = 0x00001100; // Set Port A as all input
+    TRISA = 0x00000100; // Set Port A as all input
     TRISB = 0xFF; 
     TRISC = 0x00;
     TRISD = 0x00; //All output mode for LCD
@@ -229,6 +229,7 @@ void main(void) {
                 is_battery_up = ir(2, 5);
                 is_hit = microswitch(5);
 
+                // TESTING
                 LATAbits.LATA5 = 1;
                 LATAbits.LATA1 = 1;
 
@@ -246,7 +247,7 @@ void main(void) {
                 //     move_probes(RETREAT);
                 //     move_probes(TEST);
 
-                //     // sorting logic  
+                //     // sorting logic, TODO : might need a while loop to get stable result 
                 //     result = test_battery();
 
                 //     // bin selection
@@ -254,9 +255,9 @@ void main(void) {
 
                 //     // push battery
                 //     move_probes(TEST);
+                //     move_probes(RETREAT);
                 //     move_probes(PUSH);
                 //     move_probes(RETREAT);
-                //     // push_battery(signal???);
                     
                 //     // pusher down
                 //     while(!is_hit) {
@@ -325,11 +326,12 @@ void main(void) {
                 printf("%d %f", elapsed_time, voltage);
                 __lcd_newline();
                 printf(" %d  %d %d", is_battery_bottom, is_battery_up, is_hit);
-                //printf("%d", voltage > 0.3);
+/**********************************************************************************/
                 __delay_ms(10);
                 is_wait = is_termination(elapsed_time);         
             }
 
+            // TESTING
             LATAbits.LATA5 = 0;
             LATAbits.LATA1 = 0;
 
@@ -346,14 +348,10 @@ void main(void) {
             address = next_address(address);
 
            // LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
-            
-            // testing 
-            // LATCbits.LATC0 = 0;
-            // LATCbits.LATC1 = 0;
-
+ 
             is_wait = !is_wait;
             is_active = !is_active; // reset the operation flag
-            move_servo(0);
+            // move_servo(0);
 
             T0CONbits.TMR0ON = 0;   //turn off timers
             T2CONbits.TMR2ON = 0;
@@ -595,8 +593,14 @@ int calculate_elapsed_time(unsigned char* time) {
  */
 int is_termination(unsigned int time_now) {
     // if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
-    if (time_now > 30) { return 1; }
-    else { return 0; }
+    if (time_now > 30) { 
+        return 1; 
+    } else { 
+        return 0; 
+    }
+
+    // extern unsigned int total_num;
+    // return (time_now >= 180 || total_num >= 15)? 1 : 0;
 }
 
 /******************************************************************************************************/
@@ -751,19 +755,11 @@ void interrupt ISR(void) {
         elapsed_time++;
     }
     
-    // interrupt for fine-grained controls
+    // interrupt for servo controls 
     if(is_active && TMR1IF) {
         TMR1IF = 0;     //clear interrupt bit 
         TMR1 = 64285;   //reset timer 1 count
-
-        //  move_stepper1(1);
-        
-        // // if(motorstep < 2000) {
-        //    // move_stepper1();
-        //     // motorstep++;
-        // // }        
-        // // move_stepper1();
-
+        // driving two servo motors for the two probes
         if (servo1_active) {
             if (servo1_low == 0) {
                 if (servo1_high < servo1_high_duration) {
@@ -807,34 +803,28 @@ void interrupt ISR(void) {
         // if(servo1_active && servo2_active) {
         //     // Step 1: close 
         //     while() {
-
         //     }
 
             // Step 2: kick 
 
-
-        //     // Step 3: resume 
-        // }
-
-        
+        //    Step 3: resume 
+        // }  
     }
 
     // interrupt for background dc motors 
     if(is_active && TMR2IF) {
         TMR2IF = 0;     //clear interrupt bit 
         TMR2 = 40535;   //reset timer 2 count
-
+        // driving two DC motors for the wheel and conveyor belt    
         move_dc1();
-        move_dc2();
+        move_dc2(0);
     }
 
-    // interrupt for background tasks 
+    // interrupt for stepper control 
     if(is_active && TMR3IF) {
         TMR3IF = 0;     //clear interrupt bit 
         TMR3 = 60535;   // reset timer 3 count
-
-        // // driving two DC motors for the wheel and conveyor belt    
-
+        // driving two stepper motors for the pusher and the bin plate 
         move_stepper1(0);
         move_stepper2(1);
 
@@ -859,27 +849,26 @@ void interrupt ISR(void) {
         // }
 
         // if (stepper2_active == 1) {
-        //     if(stepper2_degree_count < stepper2_degree) {
+        //     if(stepper2_duration_count < stepper2_duration) {
         //         move_stepper2(1);
-        //         stepper2_degree_count++;
+        //         stepper2_duration_count++;
         //     } else {
-        //         stepper2_degree_count = 0;
+        //         stepper2_duration_count = 0;
         //         stepper2_active = 0;
         //     }
         // } else if (stepper2_active == 2) {
-        //     if(stepper2_degree_count < stepper2_degree) {
+        //     if(stepper2_duration_count < stepper2_duration) {
         //         move_stepper2(0);
-        //         stepper2_degree_count++;
+        //         stepper2_duration_count++;
         //     } else {
-        //         stepper2_degree_count = 0;
+        //         stepper2_duration_count = 0;
         //         stepper2_active = 0;
         //     }
         // } else {
         //     clear_stepper(2);
         // }
-
     }
-}   
+}   // end of the interrupt ISR   
 
 /******************************************************************************************************/
 /* motor control codes */
@@ -922,22 +911,36 @@ void move_stepper2(unsigned int direction) {
 }
 
 void clear_stepper(char channel) {
+    extern unsigned int stepper1_active, stepper2_active;
     if (channel == 1) {
+        stepper1_active = 0;
         LATCbits.LATC3 = 0;
         LATCbits.LATC4 = 0;
     } else if (channel == 2) {
+        stepper2_active = 0;
         LATCbits.LATC0 = 0;
         LATCbits.LATC1 = 0;
     }
 }
 
-void move_stepper_angle(unsigned int stepper_id, float angle, unsigned int direction) {
+
+void set_stepper_duration(char channel, unsigned int duration) {
+    extern unsigned int stepper1_duration, stepper2_duration;
+    if (channel == 1) {
+        stepper1_duration = duration;
+    } else if ( channel == 2) {
+        stepper2_duration = duration;
+    }
+} 
+
+
+void move_stepper_angle(char channel, float angle, char direction) {
     // 200 steps per revolution <-> 1 step is 1.8 degree 
     unsigned int duration = (int)(angle / 1.8);
     for(unsigned int i = 0; i < duration; i++) {
-        if(stepper_id == 1) {
-            move_stepper1(direction);
-       } else if(stepper_id == 2) {
+        if(channel == 1) {
+            move_stepper1(direction, channel);
+       } else if(channel == 2) {
             move_stepper2(direction);
        }
    }
@@ -951,9 +954,15 @@ void move_dc1() {
 }
 
 
-void move_dc2() {
+void move_dc2(char direction) {
     // RC3, 4, 5 are used for the second DC motor, no pwm control for now
-    LATCbits.LATC5 = 1; // !LATCbits.LATC5;
+    if (direction == 1) {
+        LATCbits.LATC5 = 1; // !LATCbits.LATC5;
+        LATAbits.LATA7 = 0;
+    } else {
+        LATCbits.LATC5 = 0; 
+        LATAbits.LATA7 = 1;
+    }
 }
 
 
@@ -1039,7 +1048,7 @@ unsigned int test_battery() {
     
     // Step 1: reset relays, open 1, 2, 3, 4, 5, 6
     TRISA = 0b11110011;
-    LATAbits.LATA7 = 0;   // relay 1
+    LATAbits.LATA3 = 0;   // relay 1
     LATAbits.LATA6 = 0;   // relay 2
     LATAbits.LATA5 = 0;   // relay 3
     LATAbits.LATA4 = 0;   // relay 4
@@ -1047,7 +1056,7 @@ unsigned int test_battery() {
     LATAbits.LATA0 = 0;   // relay 6
 
     // Step 2: close relay 1 and 3, check D, if voltage -> 9V, open 1 and 3
-    LATAbits.LATA7 = 1;
+    LATAbits.LATA3 = 1;
     LATAbits.LATA5 = 1;
     D = get_voltage(2, 50);
     if (D > 3.82) {
@@ -1059,7 +1068,7 @@ unsigned int test_battery() {
         total_num++;
         return DRAIN_BAT;
     }
-    LATAbits.LATA7 = 0;
+    LATAbits.LATA3 = 0;
     LATAbits.LATA5 = 0;
 
     // Step 3: close relay 4 and 6, check D, if voltage -> 9V, open 4 and 6
