@@ -73,20 +73,13 @@ void move_stepper(unsigned int, char);
 unsigned int regulate_signal(unsigned int);
 unsigned int ir(unsigned int, unsigned int); 
 unsigned int microswitch(unsigned int);
+void rotate_bin(char direction, char degree);
 unsigned int test_battery();
 void move_bin(unsigned int);
 void push_battery(unsigned int);
 void move_probes(char, unsigned int);
 
 // global constant variables
-unsigned int servo1_high_duration = 3;
-unsigned int servo1_low_duration = 37;
-unsigned int servo2_high_duration = 3;
-unsigned int servo2_low_duration = 37;
-
-unsigned int stepper1_duration = 5000;    // pusher operation time 5s 
-unsigned int stepper2_duration = 100;
-
 const char keys[] = "123A456B789C*0#D"; 
 const char happynewyear[7] = {  0x00, //45 Seconds 
                             0x00, //59 Minutes
@@ -117,6 +110,9 @@ unsigned int is_wait = 0;
 // log info
 unsigned int log = 0;
 
+// pusher info 
+unsigned int is_up = 0;
+
 // dc info
 unsigned int dc_count = 0;
 unsigned int dc_duration_low = 1;
@@ -133,11 +129,19 @@ unsigned int servo2_active = 0;
 unsigned int servo2_high = 1;
 unsigned int servo2_low = 0;
 
+unsigned int servo1_high_duration = 3;
+unsigned int servo1_low_duration = 37;
+unsigned int servo2_high_duration = 3;
+unsigned int servo2_low_duration = 37;
+
 //stepper degree counter 
 unsigned int stepper1_active = 0;   // standby: 0, positive spin: 1, negative spin: 2
 unsigned int stepper1_duration_count = 0;     
 unsigned int stepper2_active = 0;
 unsigned int stepper2_duration_count = 0;
+
+unsigned int stepper1_duration = 5000;    // pusher operation time 5s 
+unsigned int stepper2_duration = 100;
 
 // main function 
 void main(void) {
@@ -180,13 +184,13 @@ void main(void) {
     TMR0 = 55770;
     // timer 1
     T1CON = 0b10000000;
-    TMR1 = 64285;
+    TMR1 = 65285;
     // timer 2
     T2CON = 0b10000000;
     TMR2 = 53035;
     // timer 3
     T3CON = 0b10000000;
-    TMR3 = 60535;  // need to determine the third timer, 65535-0.005*10000000/4
+    TMR3 = 63785; //60535;  // need to determine the third timer, 65535-0.005*10000000/4
     
     ei();           //Enable all interrupts
     //</editor-fold>
@@ -237,15 +241,15 @@ void main(void) {
                 is_hit = microswitch(5);
 
                 // TESTING
-               LATAbits.LATA4 = 1;
-               LATAbits.LATA0 = 1;
+               LATAbits.LATA3 = 1;
+               LATAbits.LATA5 = 1;
 
 /**********************************************************************************/
 
                 // if(is_battery_bottom && !is_battery_up) {
                 //     // pusher up 
                 //     while(!is_battery_up) {
-                //         move_stepper(1, 1);
+                //         move_stepper(1, 1);  consider changing to an certain angle 
                 //         is_battery_up = ir(2, 5);
                 //     }
                 // }
@@ -267,20 +271,25 @@ void main(void) {
                 //     move_probes(RETREAT);
                     
                 //     // pusher down
-                //     while(!is_hit) {
-                //         move_stepper(2, 1);
-                //         is_hit = microswitch(5);
-                //     }
+                    // while(!is_hit) {
+                    //     move_stepper(2, 1);  consider changing to an angle too 
+                    //     is_hit = microswitch(5);
+                    // }
                 // }
 
 /**********************************************************************************/
-
                 // Testing
+
                 // while (ir(1, 5)) { 
                 //     // move_stepper_angle(1, 180, 1);
-                //     set_servo_duration(1, 1, 4);
-                //     set_servo_duration(1, 0, 36);
+                //     set_servo_duration(1, 1, 12);
+                //     set_servo_duration(1, 0, 188);
                 //     move_servo(1);
+                // }
+
+                // while(!ir(1,5)) {
+                //     set_servo_duration(1, 1, 13);
+                //     set_servo_duration(1, 0, 187);
                 // }
                 // move_servo(0);
 
@@ -299,42 +308,108 @@ void main(void) {
                 // }
                 // move_servo(0);
 
-                if (is_battery_bottom) {
-                    for(unsigned int i = 0; i < 20; i ++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    for(unsigned int i = 0; i < 500; i ++) {
-                        move_probes(TEST, 300);
-                    }
-                    for(unsigned int i = 0; i < 20; i ++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    for(unsigned int i = 0; i < 20; i ++) {
-                        move_probes(PUSH, 300);
-                    }
-                    for(unsigned int i = 0; i < 100; i ++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    // if (stepper1_active == 0) {
-                    //     move_stepper(1, 1);
-                    //     move_stepper(2, 2);
-                    // }
-                } 
+                // if (is_battery_up) {
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 120; i++) {
+                //         move_probes(TEST, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(PUSH, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 50; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     // if (stepper1_active == 0) {
+                //     //     move_stepper(1, 1);
+                //     //     move_stepper(2, 2);
+                //     // }
+                // } 
 
                 // if (is_battery_up) {
-                //     move_probes(TEST, 300);
+                //     // move_probes(TEST, 300);
                 //     if (stepper1_active == 0) {
-                //         move_stepper_angle(1, 90, 1);
-                //         move_stepper_angle(2, 360, 0);
+                //         move_stepper_angle(1, 90, 0);
+                //         // move_stepper(2, 1);
                 //     }
-                // }
+                    // if(stepper2_active == 0) {
+                    //     // move_stepper_angle(2, 90, 0);
+                    //     move_stepper(2, 2);
+                    // }
+                
+//////////////
+                if (is_battery_bottom && !is_battery_up && !is_up) {
+                    // move_stepper(2, 2);
+                    // move_stepper(2, 1);
+                    move_stepper_angle(2, 11000, 1);
+                    //move_stepper(2, 2);
+                   // is_battery_bottom = ir(1, 5);
+                    //is_battery_up = ir(2, 5);
+                }
+                
+                // clear_stepper(2);
+                if (is_battery_up) {
+                    //for(unsigned int i = 0; i < 1; i++) {
+                        //move_probes(TEST, 300);
+                        __delay_ms(2000);
+                    //}
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(RETREAT, 300);
+                    }
+                    for(unsigned int i = 0; i < 100; i++) {
+                        move_probes(TEST, 300);
+                        //result = test_battery();
+                        //printf("%d", result);
+                        // __lcd_clear();
+                        // __lcd_home();
+                        // voltage = get_voltage(2, 10);
+                        // printf("%f", voltage);
+                        // result = test_battery();
+                        // move_bin(result);
+                    }
+
+                    result = test_battery();
+                    printf("%d", result);
+                    // rotate_bin(0, 2);
+                    move_bin(result);
+                    for(unsigned int i = 0; i < 1000; i++) {
+                        __lcd_clear();
+                        __lcd_home();
+                        printf("%d", result);
+                    }
+
+                    
+                    // for(unsigned int i = 0; i < 30; i++) {
+                    //     move_stepper_angle(1, 100, 0);
+                    // }
+
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(RETREAT, 300);
+                    }
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(PUSH, 300);
+                    }
+                    for(unsigned int i = 0; i < 50; i++) {
+                        move_probes(RETREAT, 300);
+                    }
+                    is_up = 1;
+                }
+                if (is_battery_bottom && is_up) {
+                    move_stepper_angle(2, 10800, 0);
+                }
+ //////////////               
+                // result = test_battery();
+                // move_bin(result);
 
                 // if (is_hit) {
                 //     move_probes(PUSH, 300);
                 //     move_stepper(0, 1);
                 //     move_stepper(0, 2);
                 // }
-                //printf("dfdfddfdfddfdfdfd");
                 voltage = get_voltage(2, 10);
 //                current_time(time);
 //                elapsed_time = calculate_elapsed_time(time);
@@ -345,15 +420,16 @@ void main(void) {
                 __lcd_home();
                 printf("%d %f", elapsed_time, voltage);
                 __lcd_newline();
-                printf("%d  %d %d", is_battery_bottom, is_battery_up, is_hit);
+                // printf("%d  %d %d", is_battery_bottom, is_battery_up, is_hit);
+                printf("%d %d %d %d %d",is_battery_bottom, is_battery_up, is_hit, result, previous_type);
 /**********************************************************************************/
                 __delay_ms(300);
                 is_wait = is_termination(elapsed_time);         
             }
 
             // TESTING
-            LATAbits.LATA4 = 0;
-            LATAbits.LATA0 = 0;
+            LATAbits.LATA3 = 0;
+            LATAbits.LATA5 = 0;
 
             // EEPROM logging 
             Eeprom_WriteByte(address, AA_num);
@@ -371,7 +447,6 @@ void main(void) {
  
             is_wait = !is_wait;
             is_active = !is_active; // reset the operation flag
-            // move_servo(0);
 
             T0CONbits.TMR0ON = 0;   //turn off timers
             T2CONbits.TMR2ON = 0;
@@ -613,7 +688,7 @@ int calculate_elapsed_time(unsigned char* time) {
  */
 int is_termination(unsigned int time_now) {
     // if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
-    if (time_now > 30) { 
+    if (time_now > 100) { 
         return 1; 
     } else { 
         return 0; 
@@ -781,7 +856,7 @@ void interrupt ISR(void) {
     // interrupt for servo controls 
     if(is_active && TMR1IF) {
         TMR1IF = 0;     //clear interrupt bit 
-        TMR1 = 64285;   //reset timer 1 count
+        TMR1 = 65285;   //reset timer 1 count
         // driving two servo motors for the two probes
         if (servo1_active) {    // white wire 
             if (servo1_low == 0) {
@@ -863,52 +938,52 @@ void interrupt ISR(void) {
     // interrupt for stepper control 
     if(is_active && TMR3IF) {
         TMR3IF = 0;     //clear interrupt bit 
-        TMR3 = 60535;   // reset timer 3 count
+        TMR3 = 63785; //60535;   // reset timer 3 count
         // driving two stepper motors for the pusher and the bin plate 
         // move_stepper1(1);
         // move_stepper2(0);
-        clear_stepper(1);
-        clear_stepper(2);
+        // clear_stepper(1);
+        // clear_stepper(2);
 
-        // if (stepper1_active == 1) {
-        //     if(stepper1_duration_count < stepper1_duration) {
-        //         move_stepper1(1);
-        //         stepper1_duration_count++;
-        //     } else {
-        //         stepper1_duration_count = 0;
-        //         stepper1_active = 0;
-        //     }
-        // } else if (stepper1_active == 2) {
-        //     if(stepper1_duration_count < stepper1_duration) {
-        //         move_stepper1(0);
-        //         stepper1_duration_count++;
-        //     } else {
-        //         stepper1_duration_count = 0;
-        //         stepper1_active = 0;
-        //     }
-        // } else {
-        //     clear_stepper(1);
-        // }
+        if (stepper1_active == 1) {
+            if(stepper1_duration_count < stepper1_duration) {
+                move_stepper1(1);
+                stepper1_duration_count++;
+            } else {
+                stepper1_duration_count = 0;
+                stepper1_active = 0;
+            }
+        } else if (stepper1_active == 2) {
+            if(stepper1_duration_count < stepper1_duration) {
+                move_stepper1(0);
+                stepper1_duration_count++;
+            } else {
+                stepper1_duration_count = 0;
+                stepper1_active = 0;
+            }
+        } else {
+            clear_stepper(1);
+        }
 
-        // if (stepper2_active == 1) {
-        //     if(stepper2_duration_count < stepper2_duration) {
-        //         move_stepper2(1);
-        //         stepper2_duration_count++;
-        //     } else {
-        //         stepper2_duration_count = 0;
-        //         stepper2_active = 0;
-        //     }
-        // } else if (stepper2_active == 2) {
-        //     if(stepper2_duration_count < stepper2_duration) {
-        //         move_stepper2(0);
-        //         stepper2_duration_count++;
-        //     } else {
-        //         stepper2_duration_count = 0;
-        //         stepper2_active = 0;
-        //     }
-        // } else {
-        //     clear_stepper(2);
-        // }
+        if (stepper2_active == 1) {
+            if(stepper2_duration_count < stepper2_duration) {
+                move_stepper2(1);
+                stepper2_duration_count++;
+            } else {
+                stepper2_duration_count = 0;
+                stepper2_active = 0;
+            }
+        } else if (stepper2_active == 2) {
+            if(stepper2_duration_count < stepper2_duration) {
+                move_stepper2(0);
+                stepper2_duration_count++;
+            } else {
+                stepper2_duration_count = 0;
+                stepper2_active = 0;
+            }
+        } else {
+            clear_stepper(2);
+        }
     }
 }   // end of the interrupt ISR   
 
@@ -941,13 +1016,13 @@ void set_servo_duration(char channel, char highlow, unsigned int duration) {
 }
 
 
-void move_stepper1(unsigned int direction) {  
+void move_stepper1(unsigned int direction) {  // wheel, stepper 1 
     LATCbits.LATC3 = !LATCbits.LATC3;
     LATCbits.LATC4 = direction;
 }
 
 
-void move_stepper2(unsigned int direction) { 
+void move_stepper2(unsigned int direction) {   // pusher, stepper 2
     LATCbits.LATC0 = !LATCbits.LATC0;
     LATCbits.LATC1 = direction;
 }
@@ -1082,6 +1157,37 @@ unsigned int microswitch(unsigned int average_span) {
 }
 
 
+void rotate_bin(char direction, char degree) {
+    // degree 1 is 90, degree 2 is 180; direction is 1 and 0
+    if (degree == 1) {
+        if (direction == 0) {
+            for(unsigned int i = 0; i < 30; i++) {
+                move_stepper_angle(1, 100, 0);
+            }
+        } else {
+            for(unsigned int i = 0; i < 30; i++) {
+                move_stepper_angle(1, 100, 1);
+            }
+        }
+    } else {
+        for(unsigned int i = 0; i < 70; i++) {
+            move_stepper_angle(1, 100, 0);
+        }
+    }
+}
+
+
+float max_voltage(unsigned int duration) {
+    float current = get_voltage(2, 50);
+    float temp = 0;
+    for (unsigned int i = 0; i < duration; i++) {
+        temp = get_voltage(2, 50);
+        current = ((temp > current)? temp : current);
+    }
+    return current;
+}
+
+
 unsigned int test_battery() {
     // AA_BAT 3
     // C_BAT 4
@@ -1102,15 +1208,18 @@ unsigned int test_battery() {
     // Step 2: close relay 1 and 3, check D, if voltage -> 9V, open 1 and 3
     LATAbits.LATA3 = 1;
     LATAbits.LATA5 = 1;
-    D = get_voltage(2, 50);
-    if (D > 3.82) {
-        Nine_num++;
-        total_num++;
-        return NINE_BAT;
-    } else if (D > 0.10) {
-        Drain_num++;
-        total_num++;
-        return DRAIN_BAT;
+
+    for (unsigned int i = 0; i < 20; i++) {
+        D = max_voltage(10);  // get_voltage(2, 50);
+        if (D > 3.82) {
+            Nine_num++;
+            total_num++;
+            return NINE_BAT;
+        } else if (D > 0.01) {
+            Drain_num++;
+            total_num++;
+            return DRAIN_BAT;
+        }
     }
     LATAbits.LATA3 = 0;
     LATAbits.LATA5 = 0;
@@ -1118,15 +1227,17 @@ unsigned int test_battery() {
     // Step 3: close relay 4 and 6, check D, if voltage -> 9V, open 4 and 6
     LATAbits.LATA0 = 1;
     LATAbits.LATA4 = 1;
-    D = get_voltage(2, 50);
-    if (D > 3.82) {
-        Nine_num++;
-        total_num++;
-        return NINE_BAT;
-    } else if (D > 0.10) {
-        Drain_num++;
-        total_num++;
-        return DRAIN_BAT;
+    for (unsigned int i = 0; i < 20; i++) {
+        D = max_voltage(10);  // get_voltage(2, 50);
+        if (D > 3.82) {
+            Nine_num++;
+            total_num++;
+            return NINE_BAT;
+        } else if (D > 0.01) {
+            Drain_num++;
+            total_num++;
+            return DRAIN_BAT;
+        }
     }
     LATAbits.LATA4 = 0;
     LATAbits.LATA0 = 0;
@@ -1134,15 +1245,17 @@ unsigned int test_battery() {
     // Step 4: close relay 3 and 5, check D, if voltage -> C, open 3 and 5 
     LATAbits.LATA5 = 1;
     LATAbits.LATA1 = 1;
-    D = get_voltage(2, 50);
-    if (D > 0.63) {
-        C_num++;
-        total_num++;
-        return C_BAT;
-    } else if (D > 0.10) {
-        Drain_num++;
-        total_num++;
-        return DRAIN_BAT;
+    for (unsigned int i = 0; i < 20; i++) {
+        D = max_voltage(10);  // get_voltage(2, 50);
+        if (D > 0.63) {
+            C_num++;
+            total_num++;
+            return C_BAT;
+        } else if (D > 0.01) {
+            Drain_num++;
+            total_num++;
+            return DRAIN_BAT;
+        }
     }
     LATAbits.LATA5 = 0;
     LATAbits.LATA1 = 0;
@@ -1150,19 +1263,22 @@ unsigned int test_battery() {
     // Step 5: close relay 2 and 6, check D, if voltage -> AA, open 2 and 6 
     LATDbits.LATD1 = 1;
     LATAbits.LATA0 = 1;
-    D = convert_voltage(2, 50);
-    if (D > 0.63) {
-        AA_num++;
-        total_num++;
-        return AA_BAT;
-    } else if (D > 0.10) {
-        Drain_num++;
-        total_num++;
-        return DRAIN_BAT;
+    for (unsigned int i = 0; i < 20; i++) {
+        D = max_voltage(10);  // get_voltage(2, 50);
+        if (D > 0.63) {
+            AA_num++;
+            total_num++;
+            return AA_BAT;
+        } else if (D > 0.01) {
+            Drain_num++;
+            total_num++;
+            return DRAIN_BAT;
+        }
     }
     LATDbits.LATD1 = 0;
     LATAbits.LATA0 = 0;
 
+    // Default case 
     Drain_num++;
     total_num++;
     return DRAIN_BAT;
@@ -1174,38 +1290,50 @@ void move_bin(unsigned int bat_type) {
     switch(bat_type) {
         case AA_BAT:
             if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 90, 0);
+                // move_stepper_angle(1, 90, 0);
+                rotate_bin(0, 1);
             } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 90, 1);
+                // move_stepper_angle(1, 90, 1);
+                rotate_bin(1, 1);
             } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 180, 0);
+                // move_stepper_angle(1, 180, 0);
+                rotate_bin(0, 2);
             }
             break;
         case C_BAT: 
             if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 180, 0);
+                // move_stepper_angle(1, 180, 0);
+                rotate_bin(0, 2);
             } else if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 90, 0);
+                // move_stepper_angle(1, 90, 0);
+                rotate_bin(0, 1);
             } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 90, 1);
+                // move_stepper_angle(1, 90, 1);
+                rotate_bin(1, 1);
             }
             break;
         case NINE_BAT:
             if (previous_type == DRAIN_BAT) {
-                move_stepper_angle(2, 90, 1);
+                // move_stepper_angle(1, 90, 1);
+                rotate_bin(1, 1);
             } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 90, 0);
+                // move_stepper_angle(1, 90, 0);
+                rotate_bin(0, 1);
             } else if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 180, 0);
+                // move_stepper_angle(1, 180, 0);
+                rotate_bin(0, 2);
             }
             break;
         case DRAIN_BAT:
             if (previous_type == AA_BAT) {
-                move_stepper_angle(2, 90, 1);
+                // move_stepper_angle(1, 90, 1);
+                rotate_bin(1, 1);
             } else if (previous_type == C_BAT) {
-                move_stepper_angle(2, 180, 0);
+                // move_stepper_angle(1, 180, 0);
+                rotate_bin(0, 2);
             } else if (previous_type == NINE_BAT) {
-                move_stepper_angle(2, 90, 0);
+                // move_stepper_angle(1, 90, 0);
+                rotate_bin(0, 1);
             }
             break;
         default:    // default should be drained battery due to a higher probability
@@ -1223,30 +1351,30 @@ void move_probes(char status, unsigned int speed) {
     if (status == RETREAT) {
         while (i < speed) {
             i++;
-            set_servo_duration(1, 1, 2);
-            set_servo_duration(1, 0, 38);
-            set_servo_duration(2, 1, 4);
-            set_servo_duration(2, 0, 36);
+            set_servo_duration(1, 1, 10);
+            set_servo_duration(1, 0, 190);
+            set_servo_duration(2, 1, 17);
+            set_servo_duration(2, 0, 183);
             move_servo(1);
         }
         move_servo(0);
     } else if (status == TEST) {
         while (i < speed) {
             i++;
-            set_servo_duration(1, 1, 4);
-            set_servo_duration(1, 0, 36);
-            set_servo_duration(2, 1, 2);
-            set_servo_duration(2, 0, 38);
+            set_servo_duration(1, 1, 16);
+            set_servo_duration(1, 0, 184);
+            set_servo_duration(2, 1, 9);
+            set_servo_duration(2, 0, 191);
             move_servo(1);
         }
         move_servo(0);
     } else if (status == PUSH) {
         while (i < speed) {
             i++;
-            set_servo_duration(1, 1, 4);
-            set_servo_duration(1, 0, 36);
-            set_servo_duration(2, 1, 4);
-            set_servo_duration(2, 0, 36);
+            set_servo_duration(1, 1, 17);
+            set_servo_duration(1, 0, 183);
+            set_servo_duration(2, 1, 17);
+            set_servo_duration(2, 0, 183);
             move_servo(1);
         }
         move_servo(0);
