@@ -310,97 +310,96 @@ void main(void) {
                     //     move_stepper(2, 2);
                     // }
                 
-//////////////
+////////////// //////////////    //////////////    //////////////    //////////////    //////////////   
 
-                if (!is_battery_bottom) {   
-                    // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
-                    test_done = 0;
-                }
+                // if (!is_battery_bottom) {   
+                //     // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
+                //     test_done = 0;
+                // }
 
-                if (is_battery_bottom && !is_battery_up && !test_done) {
-                    // move_stepper(2, 2);
-                    // move_stepper(2, 1);
-                    move_stepper_angle(2, 5400, 1);
-                    // move_pusher(1);
-                    // is_battery_bottom = ir(1, 5);
-                    // is_battery_up = ir(2, 5);
-                   //move_stepper_angle(1, 50, 0);
-                   //clear_stepper(2);
-                    //move_stepper(2, 2);
-                }
+                // if (is_battery_bottom && !is_battery_up && !test_done) {
+                //     move_stepper_angle(2, 5400, 1);
+                   
+                // }
                 set_dc(1, 0);
                 set_dc(2, 0);
-            //    if(mode) {
-            //         move_stepper_angle(1, 50, 0);   // 90 degrees   
-            //     }
-            //     mode = 0; 
 
                 //clear_stepper(2);
-                if (is_battery_up && !test_done) {
-                    //for(unsigned int i = 0; i < 1; i++) {
-                        //move_probes(TEST, 300);
-                        __delay_ms(2000);
-                    //}
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(RETREAT, 300);
-                    }
+                // if (is_battery_up && !test_done) {
+                //     __delay_ms(2000);
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
                    
-                    for(unsigned int i = 0; i < 100; i++) {
-                        move_probes(TEST, 300);
-                    //     voltage = get_voltage(2, 10);
-                    // printf("%f", voltage);
-                    // __lcd_home();
-                        //result = test_battery();
-                        //printf("%d", result);
-                        // __lcd_clear();
-                        // __lcd_home();
-                        // voltage = get_voltage(2, 10);
-                        // printf("%f", voltage);
-                        // result = test_battery();
-                        // move_bin(result);
-                    }
+                //     for(unsigned int i = 0; i < 50; i++) {     // previous bound 100
+                //         move_probes(TEST, 300);
+                //     }
 
-                    LATDbits.LATD1 = 1;
-                    LATAbits.LATA0 = 1;
+                    // LATDbits.LATD1 = 1;
+                    // LATAbits.LATA0 = 1;
+                    // readADC(2);
+                    // voltage = convert_voltage();
+                    // __lcd_clear();
+                    // __lcd_home();
+                    // printf("%f", voltage);
+                    // if(voltage > 0.8) {
+                    //     move_bin(AA_BAT);
+                    // } else {
+                    //     move_bin(DRAIN_BAT);
+                    // }
+                    // __delay_ms(30);
+
+                    // // Testing C battery 
+                    // LATAbits.LATA5 = 1;
+                    // LATAbits.LATA1 = 1;
+                    // readADC(2);
+                    // voltage = convert_voltage();
+                    // __lcd_clear();
+                    // __lcd_home();
+                    // printf("%f", voltage);
+                    // if(voltage > 0.8) {
+                    //     move_bin(C_BAT);
+                    // } else {
+                    //     move_bin(DRAIN_BAT);
+                    // }
+                    // __delay_ms(30);
+
+                    // Testing 9V directed to the left
+                    LATAbits.LATA3 = 1;
+                    LATAbits.LATA5 = 1;
                     readADC(2);
                     voltage = convert_voltage();
                     __lcd_clear();
                     __lcd_home();
-                printf("%f", voltage);
-                    if(voltage > 0.8) {
-                        move_bin(AA_BAT);
-                    } else {
-                        move_bin(DRAIN_BAT);
-                    }
+                    printf("%f", voltage);
+                    // if(voltage > 0.8) {
+                    //     move_bin(NINE_BAT);
+                    // } else {
+                    //     move_bin(DRAIN_BAT);
+                    // }
                     __delay_ms(30);
                     
-                    // for(unsigned int i = 0; i < 30; i++) {
-                    //     move_stepper_angle(1, 100, 0);
-                    // }
 
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(PUSH, 300);
-                    }
-                    for(unsigned int i = 0; i < 50; i++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    test_done = 1;
-                }
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(PUSH, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 50; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     // test_done = 1;
+                // }
                 
-                if (is_battery_bottom && test_done) {
-                    move_stepper_angle(2, 5400, 0);
-                   // move_pusher(0);
-                    //clear_stepper(2);
-                    //is_battery_bottom = ir(1, 5);
-                }
+                // if (is_battery_bottom && test_done) {
+                //     move_stepper_angle(2, 5400, 0);
+                // }
 
-                set_dc(1, 1);
-                set_dc(2, 1);
+                // set_dc(1, 1);
+                // set_dc(2, 1);
                 
- //////////////               
+ ////////////// //////////////    //////////////    //////////////    //////////////    //////////////                  
                 // result = test_battery();
                 // move_bin(result);
 
@@ -429,9 +428,11 @@ void main(void) {
 
             // TESTING
             LATDbits.LATD1 = 0;
-    LATAbits.LATA0 = 0;
-    LATAbits.LATA3 = 0;
-    LATAbits.LATA5 = 0;
+            LATAbits.LATA0 = 0;
+            LATAbits.LATA5 = 0;
+            LATAbits.LATA1 = 0;
+            LATAbits.LATA3 = 0;
+            LATAbits.LATA5 = 0;
 
             // EEPROM logging 
             Eeprom_WriteByte(address, AA_num);
