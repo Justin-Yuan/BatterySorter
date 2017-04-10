@@ -120,7 +120,7 @@ char num[3];
 char time_header[16] = "elapsed time is ";
 char run_time[3];
 char start_time_header[23] = " seconds, started from "; 
-char started_time[19] = "  /  /  .  :  :  \n\n";
+char started_time[19] = "  /  /     :  :  \n\n";
 
 // battery info
 unsigned int total_num = 0;
@@ -764,11 +764,16 @@ void constructElapsedTime(char* run_time, int e_time) {
 void constructStartTime(char* started_time, char* s_time) {
     started_time[0] = getChar(getTens( __bcd_to_num(s_time[6]) ));
     started_time[1] = getChar(getOnes( __bcd_to_num(s_time[6]) ));
-    started_time[2] = s_time[5];
-    started_time[4] = s_time[4];
-    started_time[6] = s_time[2];
-    started_time[8] = s_time[1];
-    started_time[10] = s_time[0];
+    started_time[3] = getChar(getTens( __bcd_to_num(s_time[5]) ));
+    started_time[4] = getChar(getOnes( __bcd_to_num(s_time[5]) ));
+    started_time[6] = getChar(getTens( __bcd_to_num(s_time[4]) ));
+    started_time[7] = getChar(getOnes( __bcd_to_num(s_time[4]) ));
+    started_time[9] = getChar(getTens( __bcd_to_num(s_time[2]) ));
+    started_time[10] = getChar(getOnes( __bcd_to_num(s_time[2]) ));
+    started_time[12] = getChar(getTens( __bcd_to_num(s_time[1]) ));
+    started_time[13] = getChar(getOnes( __bcd_to_num(s_time[1]) ));
+    started_time[15] = getChar(getTens( __bcd_to_num(s_time[0]) ));
+    started_time[16] = getChar(getOnes( __bcd_to_num(s_time[0]) ));
 }
 
 void logPCNum(char* header, int length, char* num) {
