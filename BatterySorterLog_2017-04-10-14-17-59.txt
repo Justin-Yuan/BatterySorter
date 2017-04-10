@@ -1,0 +1,18 @@
+Script started on Mon Apr 10 14:17:59 2017
+command: screen /dev/cu.usbserial-AK0599AF 9600
+[?1049h[!p[?3;4l[4l>[4l[?1h=[0m(B[1;45r[H[2J[H[2Jnumber of AA is 00
+number of C is 00
+number of 9V is 01
+number of Drained is 04
+total number is 05
+elapsed time is 1A9 seconds, started from 17/04/10 19:00:03
+
+number of AA is 01
+number of C is 00
+number of 9V is 01
+number of Drained is 02
+total number is 04
+elapsed time is 1C3 seconds, started from 17/04/10 19:00:13
+
+
+Script done on Mon Apr 10 14:31:25 2017

@@ -8,7 +8,6 @@
 #include <xc.h>
 #include <stdio.h>
 #include <stdint.h>
-// #include <string.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
@@ -51,6 +50,7 @@ float get_voltage(char, unsigned int);
 
 void clean_count(void);
 void clean_motor_status();
+void clean_up();
 
 uint8_t Eeprom_ReadByte(uint16_t);
 void Eeprom_WriteByte(uint16_t, uint8_t);
@@ -74,6 +74,7 @@ void set_dc(char, char);
 void clear_dc(char);
 void move_dc1();
 void move_dc2(char);
+void set_belt_direction(char);
 void move_servo(unsigned int);
 void move_stepper(unsigned int, char);
 
@@ -139,6 +140,9 @@ unsigned int is_wait = 0;
 
 // log info
 unsigned int log = 0;
+uint8_t next_block = 0;
+uint16_t address = 1;
+
 
 // pusher info 
 unsigned int test_done = 0;
@@ -150,8 +154,11 @@ unsigned int dc_count = 0;
 unsigned int dc_duration_low = 40;
 unsigned int dc_duration_high = 60;
 unsigned int stop_count = 0;
-unsigned int stop_inactive = 1000;
-unsigned int stop_active = 9000;
+unsigned int stop_inactive = 2000;
+unsigned int stop_active = 8000;
+unsigned int forward = 1;
+unsigned int laser_counter = 0;
+unsigned int bin_inhibitor = 1;
 
 // servo duration/count info
 unsigned int servo1_active = 0;
@@ -181,6 +188,16 @@ unsigned int is_blocked = 0;
 
 // main function 
 void main(void) {
+    // // Testing Stage 1
+    // // Eeprom_WriteByte(0, 1);
+
+    // // Testing Stage 2
+    // unsigned int ttt;
+    // while(1) {
+    //     ttt = Eeprom_ReadByte(0);
+    //     printf("%d", ttt);
+    // }
+
     // <editor-fold defaultstate="collapsed" desc=" STARTUP SEQUENCE ">
     TRISA = 0x04; // Set Port A as all input
     TRISB = 0xFF; 
@@ -204,6 +221,31 @@ void main(void) {
     CMCONbits.CIS = 0;
     ADFM = 1;
     TRISA = 0x04;
+
+    // while(1){
+    //     LATCbits.LATC2 = 1;
+    //     __delay_ms(300);
+    //     LATCbits.LATC2 = 0;
+    //     __delay_ms(300);
+
+    //     // LATCbits.LATC1 = 0;
+    //     // // LATCbits.LATC0 = 1;
+    //     //  for(unsigned int i = 0; i < 21600; i++) {
+    //     //     LATCbits.LATC0 = 1;
+    //     //     __delay_us(90);
+    //     //     LATCbits.LATC0 = 0;
+    //     //     __delay_us(90);
+    //     // }
+    //     // __delay_ms(100);
+    //     // LATCbits.LATC1 = 1;
+    //     // for(unsigned int i = 0; i < 21600; i++) {
+    //     //     LATCbits.LATC0 = 1;
+    //     //     __delay_us(90);
+    //     //     LATCbits.LATC0 = 0;
+    //     //     __delay_us(90);
+    //     // }
+    //     // __delay_ms(100);
+    // }
 
     GIE = 1;        //globally enable interrupt
     PEIE = 1;       //enable peripheral interrupt
@@ -237,18 +279,27 @@ void main(void) {
     di();
     I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
     initLCD();
-    uint16_t address = 0;
+    // uint16_t address = 1;
     ei();
 
     set_time();
-
 
     // main execution loop
     while(1) {
 
         if(is_active) {
-            // LATCbits.LATC6 = 1; //RC6 = 1 , free keypad pins
+            // LATCbits.LATC6 = 1;//RC6 = 1 , free keypad pins
             unsigned char time[7];
+
+            // address indicator 1, 2, 3, 4
+            address = Eeprom_ReadByte(0);
+            if(address > 4) {
+                address = 1;
+            }
+            next_block = address + 1;
+            next_block = (next_block > 4) ? 1 : next_block;
+            Eeprom_WriteByte(0, next_block);
+            address = (address - 1) * 96 + 1;
    
             current_time(time);
             for(unsigned int i = 0; i < 7; i++) {
@@ -257,7 +308,7 @@ void main(void) {
                 address = next_address(address);
             }
 
-            elapsed_time = 1;
+            elapsed_time = 0;
             clean_count();
 
             unsigned int is_battery_bottom = 0;
@@ -282,71 +333,80 @@ void main(void) {
                 
 ////////////// //////////////    //////////////    //////////////    //////////////    //////////////   
 
-                // // if (!is_battery_bottom) {   
-                // //     // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
-                // //     test_done = 0;
-                // // }
+                // if (!is_battery_bottom) {   
+                //     // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
+                //     test_done = 0;
+                // }    
 
-                // if (is_battery_bottom) { // && !is_battery_up) { // && !test_done) {
-                //     __delay_ms(30);
-                //     set_dc(1, 0);
-                //     clear_dc(1);
-                //     set_dc(2, 0);
-                //     clear_dc(2);
-                //     move_pusher(1);
+                if (is_battery_bottom) { // && !is_battery_up) { // && !test_done) {
+                    __delay_ms(30);
+                    
+                    set_dc(1, 0);
+                    clear_dc(1);
+                    set_dc(2, 0);
+                    clear_dc(2);
+                    move_pusher(0);
+
+                    // set_dc(1, 0);
+                    // clear_dc(1);
+                    // set_dc(2, 0);
+                    // clear_dc(2);
+
+                    test_done = 1;
+                }
+
+                // is_battery_up = ir(1, 1);
+                // if (is_battery_up && !test_done) {
                 //     test_done = 1;
                 // }
+                if (test_done) {
+                    // __delay_ms(1000);
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(RETREAT, 100);
+                    }
 
-                // // is_battery_up = ir(1, 1);
-                // // if (is_battery_up && !test_done) {
-                // //     test_done = 1;
-                // // }
-                // if (test_done) {
-                //     // __delay_ms(1000);
-                //     for(unsigned int i = 0; i < 20; i++) {
-                //         move_probes(RETREAT, 300);
-                //     }
+                    // for(unsigned int i = 0; i < 50; i++) {     // previous bound 100
+                    //     move_probes(TEST, 300);
+                    // }
 
-                //     // for(unsigned int i = 0; i < 50; i++) {     // previous bound 100
-                //     //     move_probes(TEST, 300);
-                //     // }
+                    set_servo_duration(1, 1, 16);
+                    set_servo_duration(1, 0, 184);
+                    set_servo_duration(2, 1, 8);
+                    set_servo_duration(2, 0, 192);
+                    move_servo(1);
 
-                //     set_servo_duration(1, 1, 16);
-                //     set_servo_duration(1, 0, 184);
-                //     set_servo_duration(2, 1, 8);
-                //     set_servo_duration(2, 0, 192);
-                //     move_servo(1);
+                    __delay_ms(200);
+                    result = test_battery();
 
-                //     __delay_ms(500);
-                //     result = test_battery();
+                    // __delay_ms(200);
+                    move_bin(result);
 
-                //     __delay_ms(500);
-                //     move_bin(result);
+                    // __delay_ms(200);
+                    move_servo(0);
+                    __delay_ms(30);
 
-                //     __delay_ms(500);
-                //     move_servo(0);
-                //     __delay_ms(30);
-
-                //     for(unsigned int i = 0; i < 20; i++) {
-                //         move_probes(RETREAT, 300);
-                        
-                //     }
-                //     for(unsigned int i = 0; i < 20; i++) {
-                //         move_probes(PUSH, 300);
-                //     }
-                //     for(unsigned int i = 0; i < 50; i++) {
-                //         move_probes(RETREAT, 300);
-                //     }
-                //     // test_done = 1;
-                // }
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(RETREAT, 100);           
+                    }
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(PUSH, 100);
+                    }
+                    for(unsigned int i = 0; i < 20; i++) {
+                        move_probes(RETREAT, 100);
+                    }
+                    // test_done = 1;
+                }
                 
-                // if (is_battery_bottom) {
-                //     move_pusher(0);
-                //     set_dc(1, 1);
-                //     set_dc(2, 1);
-                // }
+                if (is_battery_bottom) {
+                    // set_belt_direction(1);
+                    // set_dc(1, 1);
+                    // set_dc(2, 1);
+                    move_pusher(1);
+                    set_dc(1, 1);  //working 
+                    set_dc(2, 1);
+                }
 
-                // test_done = 0;
+                test_done = 0;
                 
  ////////////// //////////////    //////////////    //////////////    //////////////    //////////////                  
                 
@@ -359,28 +419,29 @@ void main(void) {
                 // printf("%d %d", elapsed_time, result);
                 // printf("%d %f", elapsed_time, voltage);
                 printf("%02x/%02x/%02x", time[6],time[5],time[4]);
-                printf("%02x:%02x:%02x", start_time[2],start_time[1],start_time[0]);
+                // printf("%02x:%02x:%02x", start_time[2],start_time[1],start_time[0]);
                 __lcd_newline();
-                __delay_ms(300);
+                // __delay_ms(300);
+                printf("%02x:%02x:%02x", time[2],time[1],time[0]);
                 // printf("%d  %d %d", is_battery_bottom, is_battery_up, is_hit);
-                printf("%d %d %d %d", elapsed_time, is_battery_bottom, is_blocked, result);
+                // printf("%d %d %d %d", elapsed_time, is_battery_bottom, is_blocked, result);
 /**********************************************************************************/
-                __delay_ms(300);
+                __delay_ms(30);
                 is_wait = is_termination(elapsed_time);         
             }
 
-            // TESTING
-            LATDbits.LATD1 = 0;
-            LATAbits.LATA0 = 0;
-            LATAbits.LATA5 = 0;
-            LATAbits.LATA1 = 0;
-            LATAbits.LATA3 = 0;
-            LATAbits.LATA5 = 0;
+            T0CONbits.TMR0ON = 0;   //turn off timers 
+            T2CONbits.TMR2ON = 0;
+            T3CONbits.TMR3ON = 0;
+            T1CONbits.TMR1ON = 0; 
+            clean_up();
 
-            AA_num += 1;
-            C_num += 2;
-            Nine_num += 3;
-            Drain_num += 4;
+            // AA_num += 1;
+            // C_num += 2;
+            // Nine_num += 3;
+            // Drain_num += 4;
+
+            total_num = AA_num + C_num + Nine_num + Drain_num;
 
             // EEPROM logging 
             Eeprom_WriteByte(address, AA_num);
@@ -391,7 +452,7 @@ void main(void) {
             address = next_address(address);
             Eeprom_WriteByte(address, Drain_num);
             address = next_address(address);
-            Eeprom_WriteByte(address, elapsed_time);
+            Eeprom_WriteByte(address, elapsed_time-1);
             address = next_address(address);
 
             // PC interface output
@@ -411,7 +472,7 @@ void main(void) {
             constructNum(num, AA_num + C_num + Nine_num + Drain_num);
             logPCNum(header, length, num);
 
-            constructElapsedTime(run_time, elapsed_time);
+            constructElapsedTime(run_time, elapsed_time-1);
             constructStartTime(started_time, start_time);
             logPCTime(time_header, run_time, start_time_header, started_time);
 
@@ -419,34 +480,29 @@ void main(void) {
  
             is_wait = !is_wait;
             is_active = !is_active; // reset the operation flag
-
-            T0CONbits.TMR0ON = 0;   //turn off timers 
-            T2CONbits.TMR2ON = 0;
-            T3CONbits.TMR3ON = 0;
-            T1CONbits.TMR1ON = 0; 
         } else if (log != 0) {
             
             while(menu == logA) {
                 di();
-                show_log(0);
+                show_log(1);
                 ei();
             }
             
             while(menu == logB) {
                 di();
-                show_log(96);   //40);
+                show_log(97);   //40);
                 ei();
             }
             
             while(menu == logC) {
                 di();
-                show_log(192); //80);
+                show_log(193); //80);
                 ei();
             }
 
             while(menu == logD) {
                 di();
-                show_log(288);
+                show_log(289);
                 ei();
             }
             
@@ -466,7 +522,11 @@ void main(void) {
                 di();
                 //  __lcd_clear();
                 __lcd_home();
-                printf("elapsed time: %d", elapsed_time);
+                if(elapsed_time == 0) {
+                    printf("elapsed time:%d", elapsed_time);
+                } else {
+                    printf("elapsed time:%d", elapsed_time - 1);
+                }
                 __lcd_newline();
                 printf("<< 7 DATA 9 >>");
                 ei();
@@ -644,14 +704,14 @@ int calculate_elapsed_time(unsigned char* time) {
 
 int is_termination(unsigned int time_now) {
     // if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
-    if (time_now > 5) { 
-        return 1; 
-    } else { 
-        return 0; 
-    }
+    // if (time_now > 5) { 
+    //     return 1; 
+    // } else { 
+    //     return 0; 
+    // }
 
-    // extern unsigned int total_num;
-    // return (time_now >= 180 || total_num >= 15)? 1 : 0;
+    extern unsigned int total_num;
+    return (time_now >= 180 || total_num >= 15)? 1 : 0;
 }
 
 /******************************************************************************************************/
@@ -692,11 +752,12 @@ float get_voltage(char channel, unsigned int average_span) {
 /* clean-up codes */
 
 void clean_count(void) {
-    extern unsigned int AA_num, C_num, Nine_num, Drain_num, elapsed_time;
+    extern unsigned int AA_num, C_num, Nine_num, Drain_num, total_num, elapsed_time;
     AA_num = 0;
     C_num = 0;
     Nine_num = 0;
     Drain_num = 0;
+    total_num = 0;
     elapsed_time = 0;
 }
 
@@ -706,6 +767,19 @@ void clean_motor_status() {
     LATC = 0x00;
     LATD = 0x00;
     LATE = 0x00;
+}
+
+void clean_up() {
+    LATC = 0x00;
+
+    LATAbits.LATA0 = 0;
+    LATAbits.LATA1 = 0;
+    LATAbits.LATA3 = 0;
+    LATAbits.LATA4 = 0;
+    LATAbits.LATA5 = 0;
+    LATDbits.LATD1 = 0;
+    
+    LATEbits.LATE1 = 0;
 }
 
 /******************************************************************************************************/
@@ -876,14 +950,29 @@ void show_log(uint16_t log_address) {
     __lcd_home();
     
     unsigned int AA_num = Eeprom_ReadByte(address);
+    if(AA_num > 15) {
+        AA_num = 0;
+    }
     address = next_address(address);
     unsigned int C_num = Eeprom_ReadByte(address);
+    if(C_num > 15) {
+        C_num = 0;
+    }
     address = next_address(address);
     unsigned int Nine_num = Eeprom_ReadByte(address);
+    if(Nine_num > 15) {
+        Nine_num = 0;
+    }
     address = next_address(address);
     unsigned int Drain_num = Eeprom_ReadByte(address);
+    if(Drain_num > 15) {
+        Drain_num = 0;
+    }
     address = next_address(address);
     unsigned int elapsed_time = Eeprom_ReadByte(address);
+    if(elapsed_time > 181) {
+        elapsed_time = 0;
+    }
     
     printf("AA:%d C:%d 9V:%d", AA_num, C_num, Nine_num);
     __lcd_newline();
@@ -969,8 +1058,16 @@ void interrupt ISR(void) {
         if(is_blocked) {
             set_dc(1, 0);
             clear_dc(1);
+            // bin_inhibitor = !bin_inhibitor;
         }
-               
+
+        // if(laser_counter < 70000 && !bin_inhibitor) {
+        //     laser_counter++;
+        // } else if (laser_counter >= 40000){
+        //     laser_counter = 0;
+        //     bin_inhibitor = !bin_inhibitor;
+        // }
+
         // // driving two DC motors for the wheel and conveyor belt    
         // if (dc1_active) {
         //     if (stop_count < stop_inactive) {
@@ -992,12 +1089,17 @@ void interrupt ISR(void) {
         //     }
         // }
 
-        if (dc1_active) {   // 10ms out of 1000ms
+        if (dc1_active) { //} || bin_inhibitor) { //) { // || bin_inhibitor) {   // 10ms out of 1000ms
             if (stop_count < stop_inactive) {
                 if (dc_count < dc_duration_low) {
                     clear_dc(1);
                     dc_count++;
                 } else if (dc_count < dc_duration_high){
+                    // if (bin_inhibitor) {
+                    //     move_dc1();
+                    // } else {
+                    //     clear_dc(1);
+                    // }
                     move_dc1();
                     dc_count++;
                 } else {
@@ -1014,7 +1116,12 @@ void interrupt ISR(void) {
 
         // move_dc1();
         if (dc2_active) {
-            move_dc2(1);
+            if(forward) {
+                move_dc2(1);
+            }
+            else {
+                move_dc2(0);
+            }
         }
      }
 
@@ -1172,11 +1279,17 @@ void move_wheel(char mode) {
 void move_pusher(char direction) {
     LATCbits.LATC1 = direction;
     // mode 1 is 90 degrees, mode 2 is 180 degrees
-    for(unsigned int i = 0; i < 5400; i++) {
+    // set_dc(2, 0); // turn off belt
+    // clear_dc(2);
+    for(unsigned int i = 0; i < 21600; i++) {
         LATCbits.LATC0 = 1;
-        __delay_us(150);
+        __delay_us(50);
         LATCbits.LATC0 = !LATCbits.LATC0;
-        __delay_us(150);
+        __delay_us(50);
+        // if(i == 15000) {
+        //     set_dc(2, 1); // turn on belt
+        //     set_belt_direction(direction);
+        // }
     }
 }
 
@@ -1247,6 +1360,10 @@ void move_dc2(char direction) {
     }
 }
 
+void set_belt_direction(char direction) {
+    extern unsigned int forward;
+    forward = direction;
+}
 
 void move_servo(unsigned int command) {
     extern unsigned int servo1_active, servo2_active;
