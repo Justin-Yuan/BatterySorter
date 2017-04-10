@@ -8,6 +8,7 @@
 #include <xc.h>
 #include <stdio.h>
 #include <stdint.h>
+// #include <string.h>
 #include "configBits.h"
 #include "constants.h"
 #include "lcd.h"
@@ -29,10 +30,11 @@
 #define logA 8
 #define logB 9
 #define logC 10
-#define STANDBY 11
-#define TEST 12
-#define RETREAT 13
-#define PUSH 14
+#define logD 11
+#define STANDBY 12
+#define TEST 13
+#define RETREAT 14
+#define PUSH 15
 
 // function declarations 
 void set_time(void);
@@ -59,7 +61,8 @@ void pulse_delay(unsigned int);
 void set_servo_duration(char, char, unsigned int);
 void move_stepper1(unsigned int);
 void move_stepper2(unsigned int);
-void move_wheel(char, char);
+// void move_wheel(char, char);
+void move_wheel(char);
 void move_pusher(char);
 void clear_stepper(char);
 void moveServoRetreat();
@@ -74,11 +77,22 @@ void move_dc2(char);
 void move_servo(unsigned int);
 void move_stepper(unsigned int, char);
 
+//PC interface
+int getHundreds(unsigned int);
+int getTens(unsigned int);
+int getOnes(unsigned int);
+char getChar(int);
+int constructHeader(char*, int);
+void constructNum(char*, int);
+void constructElapsedTime(char*, int);
+void constructStartTime(char*, char*);
+void logPCNum(char*, int, char*);
+void logPCTime(char*, char*, char*, char*);
 
 // battery testing stage
 unsigned int regulate_signal(unsigned int);
 unsigned int ir(unsigned int, unsigned int); 
-unsigned int microswitch(unsigned int);
+unsigned int laserBlocked(unsigned int);
 void rotate_bin(char direction, char degree);
 unsigned int test_battery();
 void move_bin(unsigned int);
@@ -87,16 +101,26 @@ void move_probes(char, unsigned int);
 
 // global constant variables
 const char keys[] = "123A456B789C*0#D"; 
-const char happynewyear[7] = {  0x00, //45 Seconds 
-                            0x00, //59 Minutes
-                            0x00, //24 hour mode, set to 23:00
-                            0x02, //Saturday 
-                            0x6, //31st
-                            0x02, //December
-                            0x17};//2016
+const char happynewyear[7] = {  0x00, //00 Seconds 
+                            0x00, //00 Minutes
+                            0x19, //24 hour mode, set to 19:00
+                            0x02, //Monday 
+                            0x10, //10st
+                            0x04, //April
+                            0x17};//2017
 
 // global variables 
 unsigned int is_active = 0; // run sorting operation
+char start_time[] = "0000000";
+
+// PC interface info
+int length;
+char* header;
+char num[3];
+char time_header[16] = "elapsed time is ";
+char run_time[3];
+char start_time_header[23] = " seconds, started from "; 
+char started_time[19] = "  /  /  .  :  :  \n\n";
 
 // battery info
 unsigned int total_num = 0;
@@ -123,11 +147,11 @@ unsigned int test_done = 0;
 unsigned int dc1_active = 1;
 unsigned int dc2_active = 1;
 unsigned int dc_count = 0;
-unsigned int dc_duration_low = 1;
-unsigned int dc_duration_high = 20;
+unsigned int dc_duration_low = 40;
+unsigned int dc_duration_high = 60;
 unsigned int stop_count = 0;
-unsigned int stop_inactive = 600;
-unsigned int stop_active = 1200;
+unsigned int stop_inactive = 1000;
+unsigned int stop_active = 9000;
 
 // servo duration/count info
 unsigned int servo1_active = 0;
@@ -152,6 +176,8 @@ unsigned int stepper1_duration = 200; //5000
 unsigned int stepper2_duration = 100;
 
 unsigned int mode = 1;
+unsigned int is_blocked = 0;
+
 
 // main function 
 void main(void) {
@@ -160,7 +186,7 @@ void main(void) {
     TRISB = 0xFF; 
     TRISC = 0x00;
     TRISD = 0x00; //All output mode for LCD
-    TRISE = 0x07;    
+    TRISE = 0x05;    
 
     LATA = 0x00;
     LATB = 0x00; 
@@ -209,10 +235,12 @@ void main(void) {
     
     // initializations and prompt to start
     di();
-    //I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
+    I2C_Master_Init(10000); //Initialize I2C Master with 100KHz clock
     initLCD();
     uint16_t address = 0;
     ei();
+
+    set_time();
 
 
     // main execution loop
@@ -221,14 +249,19 @@ void main(void) {
         if(is_active) {
             // LATCbits.LATC6 = 1; //RC6 = 1 , free keypad pins
             unsigned char time[7];
-            set_time();
-            
+   
+            current_time(time);
+            for(unsigned int i = 0; i < 7; i++) {
+                start_time[i] = time[i];
+                Eeprom_WriteByte(address, time[i]);
+                address = next_address(address);
+            }
+
             elapsed_time = 1;
             clean_count();
 
             unsigned int is_battery_bottom = 0;
             unsigned int is_battery_up = 0;
-            unsigned int is_hit = 1;
             unsigned int result = 0;
             float voltage = 0;
 
@@ -243,90 +276,94 @@ void main(void) {
             while(total_num < 15 && !is_wait) {
 
                 // real logic: ir input 
-                is_battery_bottom = ir(2, 1);
-                is_battery_up = ir(1, 1);
+                is_battery_bottom = ir(1, 1);
+                // is_battery_up = ir(1, 1);
+                is_blocked = laserBlocked(1);
                 
 ////////////// //////////////    //////////////    //////////////    //////////////    //////////////   
 
-                // if (!is_battery_bottom) {   
-                //     // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
-                //     test_done = 0;
+                // // if (!is_battery_bottom) {   
+                // //     // reset test_done flag: standby-bottom 0-done 0; pushing-bottom 1-done 0; declining-bottom 1-done 1 
+                // //     test_done = 0;
+                // // }
+
+                // if (is_battery_bottom) { // && !is_battery_up) { // && !test_done) {
+                //     __delay_ms(30);
+                //     set_dc(1, 0);
+                //     clear_dc(1);
+                //     set_dc(2, 0);
+                //     clear_dc(2);
+                //     move_pusher(1);
+                //     test_done = 1;
                 // }
 
-                if (is_battery_bottom && !is_battery_up && !test_done) {
-                    __delay_1s();
-                    set_dc(1, 0);
-                    clear_dc(1);
-                    set_dc(2, 0);
-                    clear_dc(2);
-                    move_pusher(1);
-                }
+                // // is_battery_up = ir(1, 1);
+                // // if (is_battery_up && !test_done) {
+                // //     test_done = 1;
+                // // }
+                // if (test_done) {
+                //     // __delay_ms(1000);
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
 
-                is_battery_up = ir(1, 1);
-                if (is_battery_up && !test_done) {
-                    test_done = 1;
-                }
-                if (test_done) {
-                    // __delay_ms(1000);
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(RETREAT, 300);
-                    }
+                //     // for(unsigned int i = 0; i < 50; i++) {     // previous bound 100
+                //     //     move_probes(TEST, 300);
+                //     // }
 
-                    // for(unsigned int i = 0; i < 50; i++) {     // previous bound 100
-                    //     move_probes(TEST, 300);
-                    // }
+                //     set_servo_duration(1, 1, 16);
+                //     set_servo_duration(1, 0, 184);
+                //     set_servo_duration(2, 1, 8);
+                //     set_servo_duration(2, 0, 192);
+                //     move_servo(1);
 
-                    set_servo_duration(1, 1, 16);
-                    set_servo_duration(1, 0, 184);
-                    set_servo_duration(2, 1, 8);
-                    set_servo_duration(2, 0, 192);
-                    move_servo(1);
+                //     __delay_ms(500);
+                //     result = test_battery();
 
-                    __delay_ms(500);
-                    result = test_battery();
+                //     __delay_ms(500);
+                //     move_bin(result);
 
-                    __delay_ms(500);
-                    move_bin(result);
+                //     __delay_ms(500);
+                //     move_servo(0);
+                //     __delay_ms(30);
 
-                    __delay_ms(500);
-                    move_servo(0);
-                    __delay_ms(30);
-
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(RETREAT, 300);
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(RETREAT, 300);
                         
-                    }
-                    for(unsigned int i = 0; i < 20; i++) {
-                        move_probes(PUSH, 300);
-                    }
-                    for(unsigned int i = 0; i < 50; i++) {
-                        move_probes(RETREAT, 300);
-                    }
-                    // test_done = 1;
-                }
+                //     }
+                //     for(unsigned int i = 0; i < 20; i++) {
+                //         move_probes(PUSH, 300);
+                //     }
+                //     for(unsigned int i = 0; i < 50; i++) {
+                //         move_probes(RETREAT, 300);
+                //     }
+                //     // test_done = 1;
+                // }
                 
-                if (is_battery_bottom) {
-                    move_pusher(0);
-                }
+                // if (is_battery_bottom) {
+                //     move_pusher(0);
+                //     set_dc(1, 1);
+                //     set_dc(2, 1);
+                // }
 
-                test_done = 0;
-                set_dc(1, 1);
-                set_dc(2, 1);
+                // test_done = 0;
                 
  ////////////// //////////////    //////////////    //////////////    //////////////    //////////////                  
                 
-//                current_time(time);
+               current_time(time);
 //                elapsed_time = calculate_elapsed_time(time);
 //                printf(" %3d %d %x %x %f", elapsed_time, is_battery, ADRESH, ADRESL, convert_voltage(ADRESH, ADRESL));
 //                __delay_ms(300);
                 __lcd_clear();
                 __lcd_home();
                 // printf("%d %d", elapsed_time, result);
-                printf("%d %f", elapsed_time, voltage);
+                // printf("%d %f", elapsed_time, voltage);
+                printf("%02x/%02x/%02x", time[6],time[5],time[4]);
+                printf("%02x:%02x:%02x", start_time[2],start_time[1],start_time[0]);
                 __lcd_newline();
                 __delay_ms(300);
                 // printf("%d  %d %d", is_battery_bottom, is_battery_up, is_hit);
-                printf("%d %d %d %d",is_battery_bottom, is_battery_up, result, previous_type);
+                printf("%d %d %d %d", elapsed_time, is_battery_bottom, is_blocked, result);
 /**********************************************************************************/
                 __delay_ms(300);
                 is_wait = is_termination(elapsed_time);         
@@ -340,6 +377,11 @@ void main(void) {
             LATAbits.LATA3 = 0;
             LATAbits.LATA5 = 0;
 
+            AA_num += 1;
+            C_num += 2;
+            Nine_num += 3;
+            Drain_num += 4;
+
             // EEPROM logging 
             Eeprom_WriteByte(address, AA_num);
             address = next_address(address);
@@ -352,12 +394,33 @@ void main(void) {
             Eeprom_WriteByte(address, elapsed_time);
             address = next_address(address);
 
+            // PC interface output
+            length = constructHeader(header, AA_BAT);
+            constructNum(num, AA_num);
+            logPCNum(header, length, num);
+            length = constructHeader(header, C_BAT);
+            constructNum(num, C_num);
+            logPCNum(header, length, num);
+            length = constructHeader(header, NINE_BAT);
+            constructNum(num, Nine_num);
+            logPCNum(header, length, num);
+            length = constructHeader(header, DRAIN_BAT);
+            constructNum(num, Drain_num);
+            logPCNum(header, length, num);
+            length = constructHeader(header, 100);
+            constructNum(num, AA_num + C_num + Nine_num + Drain_num);
+            logPCNum(header, length, num);
+
+            constructElapsedTime(run_time, elapsed_time);
+            constructStartTime(started_time, start_time);
+            logPCTime(time_header, run_time, start_time_header, started_time);
+
            // LATCbits.LATC0 = 0; // RC1 = 0 enable keypad     TODO, change pin assignment 
  
             is_wait = !is_wait;
             is_active = !is_active; // reset the operation flag
 
-            T0CONbits.TMR0ON = 0;   //turn off timers
+            T0CONbits.TMR0ON = 0;   //turn off timers 
             T2CONbits.TMR2ON = 0;
             T3CONbits.TMR3ON = 0;
             T1CONbits.TMR1ON = 0; 
@@ -371,13 +434,19 @@ void main(void) {
             
             while(menu == logB) {
                 di();
-                show_log(40);
+                show_log(96);   //40);
                 ei();
             }
             
             while(menu == logC) {
                 di();
-                show_log(80);
+                show_log(192); //80);
+                ei();
+            }
+
+            while(menu == logD) {
+                di();
+                show_log(288);
                 ei();
             }
             
@@ -385,8 +454,9 @@ void main(void) {
 
             while(menu == HOME && !is_active) {
                 di();
+                // __lcd_clear();
                 __lcd_home();
-                printf("press 5 to run");
+                printf("press 5 to run    ");
                 __lcd_newline();
                 printf("<< 7 DATA 9 >>");
                 ei();
@@ -394,6 +464,7 @@ void main(void) {
 
             while(menu == TIME) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("elapsed time: %d", elapsed_time);
                 __lcd_newline();
@@ -403,6 +474,7 @@ void main(void) {
 
             while(menu == TOTAL_BAT) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("total: %d", total_num);
                 __lcd_newline();
@@ -412,6 +484,7 @@ void main(void) {
 
             while(menu == AA_BAT) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("AA sorted: %d", AA_num);
                 __lcd_newline();
@@ -421,6 +494,7 @@ void main(void) {
 
             while(menu == C_BAT) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("C sorted: %d", C_num);
                 __lcd_newline();
@@ -430,6 +504,7 @@ void main(void) {
 
             while(menu == NINE_BAT) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("9V sorted: %d", Nine_num);
                 __lcd_newline();
@@ -439,6 +514,7 @@ void main(void) {
 
             while(menu == DRAIN_BAT) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
                 printf("Drained: %d", Drain_num);
                 __lcd_newline();
@@ -448,8 +524,9 @@ void main(void) {
 
             while(menu == HISTORY) {
                 di();
+                //  __lcd_clear();
                 __lcd_home();
-                printf("op #: 1 2 3");
+                printf("run:1 2 3 4");
                 __lcd_newline();
                 printf("<< 7 DATA 9 >>");
                 ei();
@@ -461,9 +538,6 @@ void main(void) {
 
 /******************************************************************************************************/
 
-/**
- * [set_time description]
- */
 void set_time(void) {
     I2C_Master_Start(); //Start condition
     I2C_Master_Write(0b11010000); //7 bit RTC address + Write
@@ -474,10 +548,6 @@ void set_time(void) {
     I2C_Master_Stop(); //Stop condition
 }
 
-/**
- * switch between different menus 
- * @param temp : key pressed 
- */
 void select_menu(unsigned char temp) {
     extern unsigned int menu;
     extern unsigned int log;
@@ -488,7 +558,6 @@ void select_menu(unsigned char temp) {
                 is_active = !is_active;
                 T0CONbits.TMR0ON = 1; //turn on TMR0 
                 T1CONbits.TMR1ON = 1; //TMR1 off when not driving steppers
-
             } else {
                 if(temp == '7'){menu = TIME;} else if(temp == '9'){menu = TOTAL_BAT;}
             }
@@ -521,6 +590,9 @@ void select_menu(unsigned char temp) {
             } else if (temp == '3') {
                 log = 3;
                 menu = logC;
+            } else if (temp == '4'){
+                log = 4;
+                menu = logD;
             } else {
                 if(temp == '7'){menu = DRAIN_BAT;} else if(temp == '9'){menu = TIME;}
             }
@@ -528,6 +600,7 @@ void select_menu(unsigned char temp) {
         case logA:
         case logB:
         case logC:
+        case logD:
             if(temp == '8') {
                 menu = HISTORY;
                 log = 0;
@@ -541,10 +614,6 @@ void select_menu(unsigned char temp) {
 /******************************************************************************************************/
 /* old timer codes */
 
-/**
- * [current_time description]
- * @param time [description]
- */
 void current_time(unsigned char* time) {
         //Reset RTC memory pointer 
         I2C_Master_Start(); //Start condition
@@ -560,31 +629,22 @@ void current_time(unsigned char* time) {
         }
         time[6] = I2C_Master_Read(0);       //Final Read without ack
         I2C_Master_Stop();
-        __lcd_clear();
-        __lcd_home();
+        // __lcd_clear();
+        // __lcd_home();
         // printf("%02x/%02x/%02x", time[6],time[5],time[4]);    //Print date in YY/MM/DD
-        __lcd_newline();
+        // __lcd_newline();
         // printf("%02x:%02x:%02x", time[2],time[1],time[0]);    //HH:MM:SS
         // __delay_1s();
         __delay_ms(300);
 }
 
-/**
- * [calculate_elapsed_time description]
- * @param  time [description]
- * @return      [description]
- */
 int calculate_elapsed_time(unsigned char* time) {
-    return (__bcd_to_num(time[0]) + 60*__bcd_to_num(time[1]));
+        return (__bcd_to_num(time[0]) + 60*__bcd_to_num(time[1]));
 }
 
-/**
- * [termination description]
- * @param time_now [description]
- */
 int is_termination(unsigned int time_now) {
     // if (time_now > 30) { extern unsigned int is_wait; is_wait = 1; }
-    if (time_now > 300) { 
+    if (time_now > 5) { 
         return 1; 
     } else { 
         return 0; 
@@ -608,19 +668,13 @@ void readADC(char channel) {
 float convert_voltage() { //(unsigned int high, unsigned int low) {
     // highest reading is 3ff or 1023
     int reading = ADRESH*16*16 + ADRESL;
-    //printf("111111111111");
     return (float)(reading * 5.0 / 1023);
-    // return ((ADRESH<<8)+ADRESL);
-    // return __bcd_to_num(ADRESL)
 }
 
 float average_voltage(char channel, unsigned int average_span) {
     float vol = 0.0;
     for(unsigned int i = 0; i < average_span; i++) {
-        // readADC(channel);
         vol += convert_voltage();
-        //printf("000000");
-        // __delay_ms(5);
     }
     return vol/average_span;
 }
@@ -652,6 +706,111 @@ void clean_motor_status() {
     LATC = 0x00;
     LATD = 0x00;
     LATE = 0x00;
+}
+
+/******************************************************************************************************/
+/* PC interface code */
+
+int getHundreds(unsigned int num) {
+    if(num > 99) { return (int)(num / 100); }
+    return 0;
+}
+
+int getTens(unsigned int num) {
+    if(num > 9) { return (int)(num / 10); }
+    return 0;
+}
+
+int getOnes(unsigned int num) {
+    return num % 10;
+}
+
+char getChar(int num) {
+    return num + '0'; 
+}
+
+int constructHeader(char* headerr, int type) {
+    extern char* header;
+    if (type == AA_BAT) {
+        header = "number of AA is ";
+        return 16;
+    } else if (type == C_BAT) {
+        header = "number of C is ";
+        return 15;
+    } else if (type == NINE_BAT) {
+        header = "number of 9V is ";
+        return 16;
+    } else if (type == DRAIN_BAT) {
+        header = "number of Drained is ";
+        return 21;
+    } else {
+        header = "total number is ";
+        return 16;
+    }
+}
+
+void constructNum(char* num, int x) {
+    num[0] = getChar(getTens(x));
+    num[1] = getChar(getOnes(x));
+    num[2] = '\n';
+}
+
+void constructElapsedTime(char* run_time, int e_time) {
+    run_time[0] = getChar(getHundreds(e_time));
+    run_time[1] = getChar(getTens(e_time));
+    run_time[2] = getChar(getOnes(e_time));
+}
+
+void constructStartTime(char* started_time, char* s_time) {
+    started_time[0] = getChar(getTens( __bcd_to_num(s_time[6]) ));
+    started_time[1] = getChar(getOnes( __bcd_to_num(s_time[6]) ));
+    started_time[2] = s_time[5];
+    started_time[4] = s_time[4];
+    started_time[6] = s_time[2];
+    started_time[8] = s_time[1];
+    started_time[10] = s_time[0];
+}
+
+void logPCNum(char* header, int length, char* num) {
+    for(unsigned int i = 0; i < length; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(header[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
+    for(unsigned int i = 0; i < 3; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(num[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
+}
+
+void logPCTime(char* time_header, char* run_time, char* start_time_header, char* started_time) {
+    for(unsigned int i = 0; i < 16; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(time_header[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
+    for(unsigned int i = 0; i < 3; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(run_time[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
+    for(unsigned int i = 0; i < 23; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(start_time_header[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
+    for(unsigned int i = 0; i < 19; i++) {
+        I2C_Master_Start(); //Start condition
+        I2C_Master_Write(0b00010000); //7 bit RTC address + Write
+        I2C_Master_Write(started_time[i]); //7 bit RTC address + Write
+        I2C_Master_Stop();
+    }
 }
 
 /******************************************************************************************************/
@@ -708,7 +867,7 @@ uint16_t next_address(uint16_t address) {
 
 void show_log(uint16_t log_address) {
     // read in log address and start fetching historical data
-    uint16_t address = log_address;
+    uint16_t address = log_address + 56;
     __lcd_home();
     
     unsigned int AA_num = Eeprom_ReadByte(address);
@@ -792,9 +951,7 @@ void interrupt ISR(void) {
                     servo2_low = 0;
                 }
             }
-        }
-        
-          
+        }         
 
     }
 
@@ -802,9 +959,35 @@ void interrupt ISR(void) {
     if(is_active && TMR2IF) {
         TMR2IF = 0;     //clear interrupt bit 
         TMR2 = 63035;   //53035;   //reset timer 2 count
-        
-        // driving two DC motors for the wheel and conveyor belt    
-        if (dc1_active) {
+
+        is_blocked = laserBlocked(1);
+        if(is_blocked) {
+            set_dc(1, 0);
+            clear_dc(1);
+        }
+               
+        // // driving two DC motors for the wheel and conveyor belt    
+        // if (dc1_active) {
+        //     if (stop_count < stop_inactive) {
+        //         if (dc_count < dc_duration_low) {
+        //             clear_dc(1);
+        //             dc_count++;
+        //         } else if (dc_count < dc_duration_high){
+        //             move_dc1();
+        //             dc_count++;
+        //         } else {
+        //             dc_count = 0;
+        //         }
+        //         stop_count++;
+        //     } else if (stop_count < stop_active) {
+        //         clear_dc(1);
+        //         stop_count++;
+        //     } else {
+        //         stop_count = 0;
+        //     }
+        // }
+
+        if (dc1_active) {   // 10ms out of 1000ms
             if (stop_count < stop_inactive) {
                 if (dc_count < dc_duration_low) {
                     clear_dc(1);
@@ -912,8 +1095,8 @@ void set_servo_duration(char channel, char highlow, unsigned int duration) {
 
 
 void move_stepper1(unsigned int direction) {  // wheel, stepper 1 
-    LATCbits.LATC3 = !LATCbits.LATC3;
-    LATCbits.LATC4 = direction;
+    LATCbits.LATC2 = !LATCbits.LATC2;
+    // LATCbits.LATC4 = direction;
 }
 
 
@@ -923,23 +1106,61 @@ void move_stepper2(unsigned int direction) {   // pusher, stepper 2
 }
 
 
-void move_wheel(char direction, char mode) {
-    LATCbits.LATC4 = direction;
-    // mode 1 is 90 degrees, mode 2 is 180 degrees
-    if (mode = 1) {
+// void move_wheel(char direction, char mode) {
+//     LATCbits.LATC4 = direction;
+//     // mode 1 is 90 degrees, mode 2 is 180 degrees, and 3 is 270 degrees 
+//     if (mode == 1) {
+//         for(unsigned int i = 0; i < 50; i++) {
+//             LATCbits.LATC2 = 1;
+//             __delay_ms(5);
+//             LATCbits.LATC2 = 0;
+//             __delay_ms(5);
+//         }
+//     } else if (mode == 2){
+//         for(unsigned int i = 0; i < 100; i++) {
+//             LATCbits.LATC2 = 1;
+//             __delay_ms(5);
+//             LATCbits.LATC2 = 0;
+//             __delay_ms(5);
+//         }
+//     } else if (mode == 3) {
+//         for(unsigned int i = 0; i < 150; i++) {
+//             LATCbits.LATC2 = 1;
+//             __delay_ms(5);
+//             LATCbits.LATC2 = 0;
+//             __delay_ms(5);
+//         }
+//     } else {
+//         LATCbits.LATC2 = 0;
+//     }
+// }
+
+void move_wheel(char mode) {
+    // LATCbits.LATC4 = direction;
+    // mode 1 is 90 degrees, mode 2 is 180 degrees, and 3 is 270 degrees 
+    if (mode == 1) {
         for(unsigned int i = 0; i < 50; i++) {
-            LATCbits.LATC3 = 1;
-            __delay_us(400);
-            LATCbits.LATC3 = 0;
-            __delay_us(400);
+            LATCbits.LATC2 = 1;
+            __delay_ms(4);
+            LATCbits.LATC2 = 0;
+            __delay_ms(4);
+        }
+    } else if (mode == 2){
+        for(unsigned int i = 0; i < 100; i++) {
+            LATCbits.LATC2 = 1;
+            __delay_ms(4);
+            LATCbits.LATC2 = 0;
+            __delay_ms(4);
+        }
+    } else if (mode == 3) {
+        for(unsigned int i = 0; i < 150; i++) {
+            LATCbits.LATC2 = 1;
+            __delay_ms(4);
+            LATCbits.LATC2 = 0;
+            __delay_ms(4);
         }
     } else {
-        for(unsigned int i = 0; i < 100; i++) {
-            LATCbits.LATC3 = 1;
-            __delay_us(400);
-            LATCbits.LATC3 = 0;
-            __delay_us(400);
-        }
+        LATCbits.LATC2 = 0;
     }
 }
 
@@ -948,75 +1169,24 @@ void move_pusher(char direction) {
     // mode 1 is 90 degrees, mode 2 is 180 degrees
     for(unsigned int i = 0; i < 5400; i++) {
         LATCbits.LATC0 = 1;
-        __delay_us(375);
+        __delay_us(150);
         LATCbits.LATC0 = !LATCbits.LATC0;
-        __delay_us(375);
+        __delay_us(150);
     }
 }
-
 
 void clear_stepper(char channel) {
     extern unsigned int stepper1_active, stepper2_active;
     if (channel == 1) {
         stepper1_active = 0;
-        LATCbits.LATC3 = 0;
-        LATCbits.LATC4 = 0;
+        LATCbits.LATC2 = 0;
+        // LATCbits.LATC4 = 0;
     } else if (channel == 2) {
         stepper2_active = 0;
         LATCbits.LATC0 = 0;
         LATCbits.LATC1 = 0;
     }
 }
-
-void moveServoRetreat() {   
-    for (unsigned int i = 0; i < 100; i++) {
-        LATCbits.LATC6 = 1;
-        // LATCbits.LATC7 = 1;
-        __delay_us(800);
-        LATCbits.LATC6 = 0;
-        // LATCbits.LATC7 = 0;
-        __delay_us(19200);
-    }
-    // for (unsigned int i = 0; i < 50; i++) {
-    //     // LATCbits.LATC6 = 1;
-    //     LATCbits.LATC7 = 1;
-    //     __delay_us(2200);
-    //     // LATCbits.LATC6 = 0
-    //     LATCbits.LATC7 = 0;
-    //     __delay_us(17800);
-    // }
-}
-
-void moveServoTest() {      
-    for (unsigned int i = 0; i < 50; i++) {
-        LATCbits.LATC6 = 1;
-        // LATCbits.LATC7 = 1;
-        __delay_us(900);
-        LATCbits.LATC6 = 0;
-        // LATCbits.LATC7 = 0;
-        __delay_us(19100);
-    }
-}
-
-void moveServoPush() {
-    for (unsigned int i = 0; i < 50; i++) {
-        LATCbits.LATC6 = 1;
-        // LATCbits.LATC7 = 1;
-        __delay_us(1100);
-        LATCbits.LATC6 = 0;
-        // LATCbits.LATC7 = 0;
-        __delay_us(18900);
-    }
-    // for (unsigned int i = 0; i < 50; i++) {
-    //     // LATCbits.LATC6 = 1;
-    //     LATCbits.LATC7 = 1;
-    //     __delay_us(2200);
-    //     // LATCbits.LATC6 = 0;
-    //     LATCbits.LATC7 = 0;
-    //     __delay_us(17800);
-    // }
-}
-
 
 void set_stepper_duration(char channel, unsigned int duration) {
     extern unsigned int stepper1_duration, stepper2_duration;
@@ -1048,7 +1218,7 @@ void set_dc(char channel, char active) {
 
 void clear_dc(char channel) {
     if (channel == 1) {
-        LATCbits.LATC2 = 0;
+        LATEbits.LATE1 = 0;
     } else if (channel == 2) {
         LATCbits.LATC5 = 0; 
         LATDbits.LATD0 = 0;
@@ -1057,7 +1227,7 @@ void clear_dc(char channel) {
 
 void move_dc1() {
     // RC0, 1, 2 are used for the first DC motor, no pwm control for now
-    LATCbits.LATC2 = 1; // !LATCbits.LATC2;
+    LATEbits.LATE1 = 1;
 }
 
 
@@ -1108,11 +1278,6 @@ void move_stepper(unsigned int command, char channel) {
 /******************************************************************************************************/
 /* battery testing codes */
 
-unsigned int regulate_signal(unsigned int raw_signal) {
-    return raw_signal ? 0 : 1;
-}
-
-
 unsigned int ir(unsigned int channel, unsigned int average_span) {
     if (channel == 1) {
         for(unsigned int i = 0; i < average_span; i++) {
@@ -1121,51 +1286,26 @@ unsigned int ir(unsigned int channel, unsigned int average_span) {
             }
         }
         return 1;
-    } else if (channel == 2) {
-        for(unsigned int i = 0; i < average_span; i++) {
-            if (PORTEbits.RE1) {
-                return 0;
-            }
-        }
-        return 1;
+    // } else if (channel == 2) {
+    //     for(unsigned int i = 0; i < average_span; i++) {
+    //         if (PORTEbits.RE1) {
+    //             return 0;
+    //         }
+    //     }
+    //     return 1;
     } else {
         return 0;   // default value, 
     }
 }
 
-
-unsigned int microswitch(unsigned int average_span) {
+unsigned int laserBlocked(unsigned int average_span) {  // not blocking: high, blocking: low;
     for(unsigned int i = 0; i < average_span; i++) {
-        if (PORTEbits.RE2) {
+        if (!PORTEbits.RE2) {
             return 1;
         }
     }
     return 0;
 }
-
-
-void rotate_bin(char direction, char degree) {
-    // degree 1 is 90, degree 2 is 180; direction is 1 and 0
-    if (degree == 1) {
-        if (direction == 0) {
-            //for(unsigned int i = 0; i < 480; i++) {
-                // move_stepper_angle(1, 50, 0);
-                move_wheel(0, 1); // 1 is 90 degrees
-            //}
-        } else {
-            //for(unsigned int i = 0; i < 500; i++) {
-                // move_stepper_angle(1, 50, 1);
-                move_wheel(1, 1);  
-            //}
-        }
-    } else {
-        //for(unsigned int i = 0; i < 600; i++) {
-            // move_stepper_angle(1, 100, 0);
-            move_wheel(0, 2); // 2 is 180 degrees
-        //}
-    }
-}
-
 
 float max_voltage(unsigned int duration) {
     float current = get_voltage(2, 10);
@@ -1179,53 +1319,65 @@ float max_voltage(unsigned int duration) {
 
 void move_bin(unsigned int bat_type) {
     extern unsigned int previous_type;
-    switch(bat_type) {
+    switch(previous_type) {
         case AA_BAT:
-            if (previous_type == DRAIN_BAT) {
-                // move_stepper_angle(1, 90, 0);
-                rotate_bin(1, 1);
-            } else if (previous_type == C_BAT) {
-                // move_stepper_angle(1, 90, 1);
-                rotate_bin(0, 1);
-            } else if (previous_type == NINE_BAT) {
-                // move_stepper_angle(1, 180, 0);
-                rotate_bin(0, 2);
+            if (bat_type == DRAIN_BAT) {
+                // move_wheel(0, 1);
+                move_wheel(1);
+            } else if (bat_type == C_BAT) {
+                // move_wheel(1, 1);
+                move_wheel(3);
+            } else if (bat_type == NINE_BAT) {
+                // move_wheel(0, 2);
+                move_wheel(2);
+            } else {
+                // move_wheel(0, 0);
+                move_wheel(0);
             }
             break;
         case C_BAT: 
-            if (previous_type == DRAIN_BAT) {
-                // move_stepper_angle(1, 180, 0);
-                rotate_bin(0, 2);
-            } else if (previous_type == AA_BAT) {
-                // move_stepper_angle(1, 90, 0);
-                rotate_bin(1, 1);
-            } else if (previous_type == NINE_BAT) {
-                // move_stepper_angle(1, 90, 1);
-                rotate_bin(0, 1);
+            if (bat_type == DRAIN_BAT) {
+                // move_wheel(0, 2);
+                move_wheel(2);
+            } else if (bat_type == AA_BAT) {
+                // move_wheel(0, 1);
+                move_wheel(1);
+            } else if (bat_type == NINE_BAT) {
+                // move_wheel(1, 1);
+                move_wheel(3);
+            } else {
+                // move_wheel(0, 0);
+                move_wheel(0);
             }
             break;
         case NINE_BAT:
-            if (previous_type == DRAIN_BAT) {
-                // move_stepper_angle(1, 90, 1);
-                rotate_bin(0, 1);
-            } else if (previous_type == C_BAT) {
-                // move_stepper_angle(1, 90, 0);
-                rotate_bin(1, 1);
-            } else if (previous_type == AA_BAT) {
-                // move_stepper_angle(1, 180, 0);
-                rotate_bin(1, 2);
+            if (bat_type == DRAIN_BAT) {
+                // move_wheel(1, 1);
+                move_wheel(3);
+            } else if (bat_type == C_BAT) {
+                // move_wheel(0, 1);
+                move_wheel(1);
+            } else if (bat_type == AA_BAT) {
+                // move_wheel(0, 2);
+                move_wheel(2);
+            } else {
+                // move_wheel(0, 0);
+                move_wheel(0);
             }
             break;
         case DRAIN_BAT:
-            if (previous_type == AA_BAT) {
-                // move_stepper_angle(1, 90, 1);
-                rotate_bin(0, 1);
-            } else if (previous_type == C_BAT) {
-                // move_stepper_angle(1, 180, 0);
-                rotate_bin(1, 2);
-            } else if (previous_type == NINE_BAT) {
-                // move_stepper_angle(1, 90, 0);
-                rotate_bin(1, 1);
+            if (bat_type == AA_BAT) {
+                // move_wheel(1, 1);
+                move_wheel(3);
+            } else if (bat_type == C_BAT) {
+                // move_wheel(0, 2);
+                move_wheel(2);
+            } else if (bat_type == NINE_BAT) {
+                // move_wheel(0, 1);
+                move_wheel(1);
+            } else {
+                // move_wheel(0, 0);
+                move_wheel(0);
             }
             break;
         default:    // default should be drained battery due to a higher probability
@@ -1272,16 +1424,6 @@ void move_probes(char status, unsigned int speed) {
         move_servo(0);
     }
 }
-
-// void move_probes(char status, unsigned int speed) {
-//     if (status == RETREAT) {
-//         moveServoRetreat();
-//     } else if (status == TEST) {
-//         moveServoTest();
-//     } else if (status == PUSH) {
-//         moveServoPush();
-//     }
-// }
 
 unsigned int test_battery() {
     // AA_BAT 3
